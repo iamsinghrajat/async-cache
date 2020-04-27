@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="async-cache", # Replace with your own username
+    name="async-async-cache", # Replace with your own username
     version="0.0.2",
     author="Rajat Singh",
     author_email="iamsinghrajat@gmail.com",

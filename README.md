@@ -1,7 +1,11 @@
 # async-cache
 **A caching solution for asyncio**
 
-**Basic Usage:**
+**Installation**
+
+`pip install async-cache`
+
+**Basic Usage**
 
 ```
 from async-cache import AsyncLRU
@@ -10,6 +14,8 @@ from async-cache import AsyncLRU
 async def func(*args, **kwargs):
     pass
 ```
+**Support**
 
-`async-cache also supports primitive as well as non-primitive function parameter.`
-`Currently only LRU cache is supported.`
+*async-cache also supports primitive as well as non-primitive function parameter.`
+
+Currently only LRU cache is supported.*
