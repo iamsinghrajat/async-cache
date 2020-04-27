@@ -1,3 +1,5 @@
 .idea/*
 __pycache__/*
-
+async_cache.egg-info/*
+dist/*
+build/*
