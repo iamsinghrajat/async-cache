@@ -6,7 +6,7 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="async-cache",
-    version="0.0.5",
+    version="0.0.6",
     author="Rajat Singh",
     author_email="iamsinghrajat@gmail.com",
     description="An asyncio Cache",
