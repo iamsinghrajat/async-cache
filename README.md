@@ -3,10 +3,10 @@
 
 **Basic Usage:**
 
-```from async_lru import AsyncCache
-import AsyncCache
+```
+from async-cache import AsyncLRU
 
-@AsyncCache(maxsize=128)
+@AsyncLRU(maxsize=128)
 async def func(*args, **kwargs):
     pass
 ```
