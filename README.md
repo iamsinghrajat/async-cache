@@ -1,5 +1,5 @@
 # async-cache
-**A LRU cache for asyncio**
+**A caching solution for asyncio**
 
 **Basic Usage:**
 
@@ -11,3 +11,5 @@ async def func(*args, **kwargs):
     pass
 ```
 
+`async-cache also supports primitive as well as non-primitive function parameter.`
+`Currently only LRU cache is supported.`
