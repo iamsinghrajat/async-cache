@@ -1,19 +1,6 @@
 language: python
-python:
-  - "3.5"
-  - "3.6"
-  - "3.7"
-install:
-  - pip install -U setuptools
-  - pip install -U pip
-  - pip install -U wheel
-  - pip install -U tox
-
-cache: pip
-
 deploy:
   provider: pypi
-  user: __token__
+  user: "__token__"
   password:
     secure: "c4MDhpjV4zRvnvJvg3TxoFKmF+uB+dFCjLic8UpBbLsPuIIqpvsk6gTjyv30yPyCAtAy7C01AIbHexTs1DUTzlSmzsZ5jaoKDjtKZfS9m5QXXINzLwre9w7Ob2kW9hOVnJso8juJ+feRKRP0iCDASzdqlBaBAkKnh5xSlGUdh49PuGf2YOTM1QdBzihkPN6xQW1l+9YSXSpWTYJdd0YMxNZfrA24VNrbH5oOcY5xAm7LC3DZRfIq4QqDzTANRDaLmUC21CMVkmUDnRJVF5ucXvPGzuVodBBLyE8jwLDTYGQXkLb6InGpN5lsD0geMeHYwPqHqE4j7G1/jmUGdGimbtYADukF7mVf38U7/fDVWuflAIWHfYPEqVtVn0G/16CXg1B3o6+rMlMhVuehsYZTB9aLEGI+VL5L+LE6rmMzecxuYz2U73TY5RyFFw7KADo5XvEV1X4psd+kf47HGI99M0J9rmaGzZvks4gLv4FY+NRuPqJUaH/b3VcbHkrMI1DgUnAyaJ6aycyvYS45WtzBOKX+sUWfzZMgESWmAPfjxRBfE29s3KA22nMWpG1VCYcR43u8QxVnpcX1RozPc9jmJyPgIwyTJYD0coOQZr7rBe7W5J2ELILfqU7w2ZxIXN40826bVuJianWMplT0gpMlENfadRrlDn/ajK3oWD6Kp3o="
-  distributions: "sdist bdist_wheel"
