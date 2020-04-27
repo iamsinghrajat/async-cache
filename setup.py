@@ -1,12 +1,11 @@
 import setuptools
 import os
-import io
 
 
 def read(*parts):
     filename = os.path.join(os.path.abspath(os.path.dirname(__file__)), *parts)
 
-    with io.open(filename, encoding='utf-8', mode='rt') as fp:
+    with open(filename, encoding='utf-8', mode='rt') as fp:
         return fp.read()
 
 
