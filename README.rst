@@ -2,6 +2,8 @@ async-cache
 ===========
 :info: A caching solution for asyncio
 
+.. image:: https://travis-ci.com/iamsinghrajat/async-cache.svg?branch=master
+    :target: https://travis-ci.com/iamsinghrajat/async-cache
 .. image:: https://img.shields.io/pypi/v/async-cache.svg
     :target: https://pypi.python.org/pypi/async-cache
 
