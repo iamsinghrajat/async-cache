@@ -1,4 +1,4 @@
-# AsyncioCache
+# async-cache
 **A LRU cache for asyncio**
 
 **Basic Usage:**
