@@ -23,9 +23,8 @@ Basic Usage
     async def func(*args, **kwargs):
         pass
 
-Support
--------
 
-async-cache also supports primitive as well as non-primitive function parameter.
+Supports primitive as well as non-primitive function parameter.
 
 Currently only LRU cache is supported.
+
