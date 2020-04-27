@@ -1,4 +1,3 @@
-language: python
 deploy:
   provider: pypi
   user: "__token__"
