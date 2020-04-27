@@ -1,12 +1,7 @@
 import setuptools
-import os
 
-
-def read(*parts):
-    filename = os.path.join(os.path.abspath(os.path.dirname(__file__)), *parts)
-
-    with open(filename, encoding='utf-8', mode='rt') as fp:
-        return fp.read()
+with open("README.rst", "r") as fh:
+    long_description = fh.read()
 
 
 setuptools.setup(
@@ -14,8 +9,8 @@ setuptools.setup(
     version="0.0.5",
     author="Rajat Singh",
     author_email="iamsinghrajat@gmail.com",
-    description=read("README.rst"),
-    long_description_content_type="text/markdown",
+    description="An asyncio Cache",
+    long_description=long_description,
     url="https://github.com/iamsinghrajat/async-cache",
     packages=setuptools.find_packages(),
     classifiers=[
