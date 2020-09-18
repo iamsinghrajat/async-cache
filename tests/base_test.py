@@ -1,9 +1,9 @@
-from async_lru import AsyncCache
+from cache import AsyncLRU
 import asyncio
 import time
 
 
-@AsyncCache(maxsize=128)
+@AsyncLRU(maxsize=128)
 async def fn(wait: int):
     await asyncio.sleep(wait)
 
