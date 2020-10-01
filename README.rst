@@ -19,7 +19,7 @@ Basic Usage
 
 .. code-block:: python
 
-    from async-cache import AsyncLRU
+    from cache import AsyncLRU
     
     @AsyncLRU(maxsize=128)
     async def func(*args, **kwargs):
