@@ -18,15 +18,24 @@ Basic Usage
 -----------
 
 .. code-block:: python
-
+    
+    # LRU Cache
     from cache import AsyncLRU
     
     @AsyncLRU(maxsize=128)
+    async def func(*args, **kwargs):
+        pass
+    
+    
+    # TTL Cache
+    from cache import AsyncTTL
+    
+    @AsyncTTL(time_to_live=60, min_cleanup_interval=60)
     async def func(*args, **kwargs):
         pass
 
 
 Supports primitive as well as non-primitive function parameter.
 
-Currently only LRU cache is supported.
+Currently TTL & LRU cache is supported.
 
