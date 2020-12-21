@@ -15,7 +15,8 @@ class AsyncTTL:
             if key not in self.keys():
                 return False
             else:
-                key_expiration = super().__getitem__(key)
+                key_values = super().__getitem__(key)
+                key_expiration = key_values[0]
                 if key_expiration < datetime.datetime.now():
                     del self[key]
                     return False
@@ -28,7 +29,8 @@ class AsyncTTL:
 
         def __setitem__(self, key, value):
             ttl_value = datetime.datetime.now() + self.time_to_live
-            super().__setitem__(key, ttl_value)
+            values = [ttl_value, value]
+            super().__setitem__(key, values)
 
         def cleanup_expired_keys(self):
             current_datetime = datetime.datetime.now()
@@ -38,7 +40,8 @@ class AsyncTTL:
 
             self.last_expiration_cleanup_datetime = current_datetime
             for key in list(self.keys()):
-                if self[key] < current_datetime:
+                key_expiration = self[key][0]
+                if key_expiration < current_datetime:
                     del self[key]
                 else:
                     break
@@ -71,10 +74,10 @@ class AsyncTTL:
         async def wrapper(*args, **kwargs):
             key = self._Key(args, kwargs)
             if key in self.ttl:
-                val = self.ttl[key]
+                val = self.ttl[key][1]
             else:
                 self.ttl[key] = await func(*args, **kwargs)
-                val = self.ttl[key]
+                val = self.ttl[key][1]
             self.ttl.cleanup_expired_keys()
             return val
 
