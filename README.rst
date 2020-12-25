@@ -6,6 +6,9 @@ async-cache
     :target: https://travis-ci.org/iamsinghrajat/async-cache
 .. image:: https://img.shields.io/pypi/v/async-cache.svg
     :target: https://pypi.python.org/pypi/async-cache
+.. image:: https://www.codetriage.com/iamsinghrajat/async-cache/badges/users.svg
+    :target: https://pypi.python.org/pypi/async-cache
+
 
 Installation
 ------------
