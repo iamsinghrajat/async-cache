@@ -24,6 +24,10 @@ Basic Usage
     
     @AsyncLRU(maxsize=128)
     async def func(*args, **kwargs):
+        """
+        maxsize : max number of results that are cached.
+                  if  max limit  is reached the oldest result  is deleted.
+        """
         pass
     
     
@@ -32,10 +36,37 @@ Basic Usage
     
     @AsyncTTL(time_to_live=60, min_cleanup_interval=60)
     async def func(*args, **kwargs):
+        """
+        time_to_live : max time for which a cached result  is valid
+        min_cleanup_interval : time interval at which all expired  results will be cleaned automatically
+                               by default they are cleaned when function is called with result's key again.
+        """
         pass
 
+    # Supports primitive as well as non-primitive function parameter.
+    # Currently TTL & LRU cache is supported.
 
-Supports primitive as well as non-primitive function parameter.
+Advanced Usage
+-----------
 
-Currently TTL & LRU cache is supported.
+.. code-block:: python
+    
+    class DbModel:
+        id: int
+        value: int
+        
+    
+    from cache import AsyncLRU
+    
+    @AsyncLRU(maxsize=128)
+    async def func(model: "DbModel"):
+        ...
+        # function logic
+        ...
+    
+    # async-cache will work even if function parameters are 
+    # orm objects or request object or of any other custom type.
+    
+    
+
 
