@@ -5,12 +5,12 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="async-cache",
-    version="1.0.2",
+    version="1.1.0",
     author="Rajat Singh",
     author_email="iamsinghrajat@gmail.com",
     description="An asyncio Cache",
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type='text/x-rst',
     url="https://github.com/iamsinghrajat/async-cache",
     packages=setuptools.find_packages(),
     classifiers=[
@@ -19,5 +19,5 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.3',
-    keywords=['asyncio', 'lru', 'cache', 'async', 'cache', 'lru-cache'],
+    keywords=['asyncio', 'lru', 'cache', 'async', 'cache', 'lru-cache', 'ttl'],
 )
