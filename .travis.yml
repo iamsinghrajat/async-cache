@@ -1,7 +1,7 @@
 language: python
 python:
   - "3.6"
-script: python3 tests/lru_test.py
+script: python3 tests/__init__.py
 install: pip3 install --upgrade pip
 deploy:
   provider: pypi
