@@ -37,12 +37,12 @@ Basic Usage
     # TTL Cache
     from cache import AsyncTTL
     
-    @AsyncTTL(time_to_live=60, min_cleanup_interval=60)
+    @AsyncTTL(time_to_live=60, maxsize=1024)
     async def func(*args, **kwargs):
         """
         time_to_live : max time for which a cached result  is valid
-        min_cleanup_interval : time interval at which all expired  results will be cleaned automatically
-                               by default they are cleaned when function is called with result's key again.
+        maxsize : max number of results that are cached.
+                  if  max limit  is reached the oldest result  is deleted.
         """
         pass
 
@@ -54,7 +54,7 @@ Advanced Usage
 
 .. code-block:: python
     
-    class DbModel:
+    class CustomDataClass:
         id: int
         value: int
         
@@ -62,14 +62,13 @@ Advanced Usage
     from cache import AsyncLRU
     
     @AsyncLRU(maxsize=128)
-    async def func(model: "DbModel"):
+    async def func(model: "CustomDataClass"):
         ...
         # function logic
         ...
     
-    # async-cache will work even if function parameters are 
-    # orm objects or request object or of any other custom type.
-    
-    
-
+    # async-cache will work even if function parameters are:
+    #   1. orm objects
+    #   2. request object
+    #   3. any other custom object type.
 
