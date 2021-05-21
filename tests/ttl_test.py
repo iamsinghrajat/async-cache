@@ -3,19 +3,22 @@ import asyncio
 import time
 
 
-@AsyncTTL(time_to_live=60, min_cleanup_interval=60)
+@AsyncTTL(time_to_live=60)
 async def long_expiration_fn(wait: int):
     await asyncio.sleep(wait)
+    return wait
 
 
-@AsyncTTL(time_to_live=5, min_cleanup_interval=60)
+@AsyncTTL(time_to_live=5)
 async def short_expiration_fn(wait: int):
     await asyncio.sleep(wait)
+    return wait
 
 
-@AsyncTTL(time_to_live=3, min_cleanup_interval=5)
+@AsyncTTL(time_to_live=3)
 async def short_cleanup_fn(wait: int):
     await asyncio.sleep(wait)
+    return wait
 
 
 def cache_hit_test():
