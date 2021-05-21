@@ -1,4 +1,8 @@
 language: generic
+python:
+  - "3.6"
+  - "pypy"
+  - "pypy3"
 deploy:
   provider: pypi
   user: "iamsinghrajat"
