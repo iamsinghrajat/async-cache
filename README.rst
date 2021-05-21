@@ -50,7 +50,7 @@ Basic Usage
     # Currently TTL & LRU cache is supported.
 
 Advanced Usage
------------
+--------------
 
 .. code-block:: python
     
