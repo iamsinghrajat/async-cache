@@ -8,6 +8,8 @@ async-cache
     :target: https://pypi.python.org/pypi/async-cache
 .. image:: https://www.codetriage.com/iamsinghrajat/async-cache/badges/users.svg
     :target: https://pypi.python.org/pypi/async-cache
+.. image:: https://static.pepy.tech/personalized-badge/async-cache?period=total&units=international_system&left_color=black&right_color=blue&left_text=Downloads
+ :target: https://pepy.tech/project/async-cache
 
 
 Installation
