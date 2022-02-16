@@ -1,16 +1,18 @@
+import datetime
+from typing import Union
+
 from .key import KEY
 from .lru import LRU
-import datetime
 
 
 class AsyncTTL:
     class _TTL(LRU):
-        def __init__(self, time_to_live, maxsize):
+        def __init__(
+            self, ttl: Union[datetime.timedelta, None], maxsize: Union[int, None]
+        ):
             super().__init__(maxsize=maxsize)
 
-            self.time_to_live = datetime.timedelta(
-                seconds=time_to_live
-            ) if time_to_live else None
+            self.ttl = ttl if ttl else None
 
             self.maxsize = maxsize
 
@@ -30,26 +32,27 @@ class AsyncTTL:
             return value
 
         def __setitem__(self, key, value):
-            ttl_value = (
-                    datetime.datetime.now() + self.time_to_live
-            ) if self.time_to_live else None
+            ttl_value = (datetime.datetime.now() + self.ttl) if self.ttl else None
             super().__setitem__(key, (value, ttl_value))
 
     def __init__(
-            self, time_to_live=60, maxsize=1024, skip_args: int = 0
+        self,
+        ttl: Union[datetime.timedelta, None] = datetime.timedelta(seconds=60),
+        maxsize: Union[int, None] = 1024,
+        skip_args: int = 0,
     ):
         """
 
-        :param time_to_live: Use time_to_live as None for non expiring cache
-        :param maxsize: Use maxsize as None for unlimited size cache
+        :param ttl: Use ttl as None for non expiring cache
+        :param maxsize: Maximal cache size. Use None to not limit cache size.
         :param skip_args: Use `1` to skip first arg of func in determining cache key
         """
-        self.ttl = self._TTL(time_to_live=time_to_live, maxsize=maxsize)
+        self.ttl = self._TTL(ttl=ttl, maxsize=maxsize)
         self.skip_args = skip_args
 
     def __call__(self, func):
         async def wrapper(*args, **kwargs):
-            key = KEY(args[self.skip_args:], kwargs)
+            key = KEY(args[self.skip_args :], kwargs)
             if key in self.ttl:
                 val = self.ttl[key]
             else:

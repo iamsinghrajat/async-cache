@@ -1,8 +1,9 @@
 from collections import OrderedDict
+from typing import Union
 
 
 class LRU(OrderedDict):
-    def __init__(self, maxsize, *args, **kwargs):
+    def __init__(self, maxsize: Union[None, int], *args, **kwargs):
         self.maxsize = maxsize
         super().__init__(*args, **kwargs)
 

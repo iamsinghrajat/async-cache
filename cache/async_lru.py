@@ -3,10 +3,9 @@ from .lru import LRU
 
 
 class AsyncLRU:
-
-    def __init__(self, maxsize=128):
+    def __init__(self, maxsize: int = 128):
         """
-        :param maxsize: Use maxsize as None for unlimited size cache
+        :param maxsize: Maximal cache size. Use None to not limit cache size.
         """
         self.lru = LRU(maxsize=maxsize)
 
