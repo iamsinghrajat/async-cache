@@ -44,11 +44,12 @@ Basic Usage
     
     # TTL Cache
     from cache import AsyncTTL
+    import datetime
     
-    @AsyncTTL(time_to_live=60, maxsize=1024)
+    @AsyncTTL(ttl=datetime.timedelta(seconds=60), maxsize=1024)
     async def func(*args, **kwargs):
         """
-        time_to_live : max time for which a cached result  is valid
+        ttl : max time for which a cached result  is valid
         maxsize : max number of results that are cached.
                   if  max limit  is reached the oldest result  is deleted.
         """
