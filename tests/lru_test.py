@@ -1,6 +1,7 @@
-from cache import AsyncLRU, AsyncTTL
 import asyncio
 import time
+
+from cache import AsyncLRU, AsyncTTL
 
 
 @AsyncLRU(maxsize=128)
@@ -14,7 +15,7 @@ class TestClassFunc:
         await asyncio.sleep(wait)
 
     @staticmethod
-    @AsyncTTL(maxsize=128, time_to_live=None, skip_args=1)
+    @AsyncTTL(maxsize=128, ttl=None, skip_args=1)
     async def skip_arg_func(arg: int, wait: int):
         await asyncio.sleep(wait)
 

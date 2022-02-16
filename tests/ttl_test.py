@@ -1,21 +1,23 @@
-from cache import AsyncTTL
 import asyncio
+import datetime
 import time
 
+from cache import AsyncTTL
 
-@AsyncTTL(time_to_live=60)
+
+@AsyncTTL(ttl=datetime.timedelta(seconds=60))
 async def long_expiration_fn(wait: int):
     await asyncio.sleep(wait)
     return wait
 
 
-@AsyncTTL(time_to_live=5)
+@AsyncTTL(ttl=datetime.timedelta(seconds=5))
 async def short_expiration_fn(wait: int):
     await asyncio.sleep(wait)
     return wait
 
 
-@AsyncTTL(time_to_live=3)
+@AsyncTTL(ttl=datetime.timedelta(seconds=3))
 async def short_cleanup_fn(wait: int):
     await asyncio.sleep(wait)
     return wait
@@ -59,4 +61,3 @@ def cache_expiration_test():
 if __name__ == "__main__":
     cache_hit_test()
     cache_expiration_test()
-
