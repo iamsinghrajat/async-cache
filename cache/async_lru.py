@@ -11,9 +11,9 @@ class AsyncLRU:
         self.lru = LRU(maxsize=maxsize)
 
     def __call__(self, func):
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args, use_cache=True, **kwargs):
             key = KEY(args, kwargs)
-            if key in self.lru:
+            if key in self.lru and use_cache:
                 return self.lru[key]
             else:
                 self.lru[key] = await func(*args, **kwargs)

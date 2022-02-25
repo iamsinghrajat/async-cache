@@ -1,6 +1,7 @@
+import datetime
+
 from .key import KEY
 from .lru import LRU
-import datetime
 
 
 class AsyncTTL:
@@ -48,9 +49,9 @@ class AsyncTTL:
         self.skip_args = skip_args
 
     def __call__(self, func):
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args, use_cache=True, **kwargs):
             key = KEY(args[self.skip_args:], kwargs)
-            if key in self.ttl:
+            if key in self.ttl and use_cache:
                 val = self.ttl[key]
             else:
                 self.ttl[key] = await func(*args, **kwargs)
