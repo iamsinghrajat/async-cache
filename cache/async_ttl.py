@@ -9,9 +9,9 @@ class AsyncTTL:
         def __init__(self, time_to_live, maxsize):
             super().__init__(maxsize=maxsize)
 
-            self.time_to_live = datetime.timedelta(
-                seconds=time_to_live
-            ) if time_to_live else None
+            self.time_to_live = (
+                datetime.timedelta(seconds=time_to_live) if time_to_live else None
+            )
 
             self.maxsize = maxsize
 
@@ -32,13 +32,13 @@ class AsyncTTL:
 
         def __setitem__(self, key, value):
             ttl_value = (
-                    datetime.datetime.now() + self.time_to_live
-            ) if self.time_to_live else None
+                (datetime.datetime.now() + self.time_to_live)
+                if self.time_to_live
+                else None
+            )
             super().__setitem__(key, (value, ttl_value))
 
-    def __init__(
-            self, time_to_live=60, maxsize=1024, skip_args: int = 0
-    ):
+    def __init__(self, time_to_live=60, maxsize=1024, skip_args: int = 0):
         """
 
         :param time_to_live: Use time_to_live as None for non expiring cache

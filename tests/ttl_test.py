@@ -1,6 +1,8 @@
-from cache import AsyncTTL
 import asyncio
 import time
+from timeit import timeit
+
+from cache import AsyncTTL
 
 
 @AsyncTTL(time_to_live=60)
@@ -56,7 +58,19 @@ def cache_expiration_test():
     assert t_third_exec > 1000
 
 
+def test_cache_refreshing_ttl():
+    t1 = timeit('asyncio.get_event_loop().run_until_complete(short_cleanup_fn(1))',
+                globals=globals(), number=1)
+    t2 = timeit('asyncio.get_event_loop().run_until_complete(short_cleanup_fn(1))',
+                globals=globals(), number=1)
+    t3 = timeit('asyncio.get_event_loop().run_until_complete(short_cleanup_fn(1, use_cache=False))',
+                globals=globals(), number=1)
+
+    assert t1 > t2
+    assert t1 - t3 <= 0.1
+
+
 if __name__ == "__main__":
     cache_hit_test()
     cache_expiration_test()
-
+    test_cache_refreshing_ttl()

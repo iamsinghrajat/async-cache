@@ -1,6 +1,8 @@
-from cache import AsyncLRU, AsyncTTL
 import asyncio
 import time
+from timeit import timeit
+
+from cache import AsyncLRU, AsyncTTL
 
 
 @AsyncLRU(maxsize=128)
@@ -81,8 +83,30 @@ def test_skip_args():
     assert t_second_exec < 4000
 
 
+def test_cache_refreshing_lru():
+    t1 = timeit(
+        "asyncio.get_event_loop().run_until_complete(TestClassFunc().obj_func(1))",
+        globals=globals(),
+        number=1,
+    )
+    t2 = timeit(
+        "asyncio.get_event_loop().run_until_complete(TestClassFunc().obj_func(1))",
+        globals=globals(),
+        number=1,
+    )
+    t3 = timeit(
+        "asyncio.get_event_loop().run_until_complete(TestClassFunc().obj_func(1, use_cache=False))",
+        globals=globals(),
+        number=1,
+    )
+
+    assert t1 > t2
+    assert t1 - t3 <= 0.1
+
+
 if __name__ == "__main__":
     test()
     test_obj_fn()
     test_class_fn()
     test_skip_args()
+    test_cache_refreshing_lru()

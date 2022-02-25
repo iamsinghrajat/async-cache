@@ -15,7 +15,7 @@ class KEY:
                 return tuple(map(_hash, param))
             if isinstance(param, dict):
                 return tuple(map(_hash, param.items()))
-            elif hasattr(param, '__dict__'):
+            elif hasattr(param, "__dict__"):
                 return str(vars(param))
             else:
                 return str(param)
