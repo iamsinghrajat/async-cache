@@ -10,7 +10,7 @@ setuptools.setup(
     author_email="iamsinghrajat@gmail.com",
     description="An asyncio Cache",
     long_description=long_description,
-    long_description_content_type='text/x-rst',
+    long_description_content_type="text/x-rst",
     url="https://github.com/iamsinghrajat/async-cache",
     packages=setuptools.find_packages(),
     classifiers=[
@@ -18,6 +18,6 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.3',
-    keywords=['asyncio', 'lru', 'cache', 'async', 'cache', 'lru-cache', 'ttl'],
+    python_requires=">=3.3",
+    keywords=["asyncio", "lru", "cache", "async", "cache", "lru-cache", "ttl"],
 )
