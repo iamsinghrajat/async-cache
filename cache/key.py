@@ -5,6 +5,7 @@ class KEY:
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
+        kwargs.pop("use_cache", None)
 
     def __eq__(self, obj):
         return hash(self) == hash(obj)
