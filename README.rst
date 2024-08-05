@@ -46,7 +46,7 @@ Basic Usage
     @AsyncTTL(time_to_live=60, maxsize=1024)
     async def func(*args, **kwargs):
         """
-        time_to_live : max time for which a cached result  is valid
+        time_to_live : max time for which a cached result  is valid (in seconds)
         maxsize : max number of results that are cached.
                   if  max limit  is reached the oldest result  is deleted.
         skip_args : Use `1` to skip first arg of func in determining cache key
