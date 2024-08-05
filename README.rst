@@ -43,7 +43,7 @@ Basic Usage
     # TTL Cache
     from cache import AsyncTTL
     
-    @AsyncTTL(time_to_live=60, maxsize=1024)
+    @AsyncTTL(time_to_live=60, maxsize=1024, skip_args=1)
     async def func(*args, **kwargs):
         """
         time_to_live : max time for which a cached result  is valid (in seconds)
@@ -52,11 +52,6 @@ Basic Usage
         skip_args : Use `1` to skip first arg of func in determining cache key
         """
         pass
-
-    class Object:
-        @AsyncTTL(time_to_live=60, maxsize=1024, skip_args=1)
-        async def func(*args, **kwargs):
-            pass
 
     # Supports primitive as well as non-primitive function parameter.
     # Currently TTL & LRU cache is supported.
