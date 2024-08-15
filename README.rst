@@ -80,6 +80,5 @@ Advanced Usage
     #   3. any other custom object type.
 
 
-    # If you want to refresh the function result use the `use_cache=False`
-    # param in the function invocation
+    # If you want to refresh the function result use the `use_cache=False` param in the function invocation
     func(*args, use_cache=False, **kwargs)
