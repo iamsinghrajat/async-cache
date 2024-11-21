@@ -9,6 +9,10 @@ from cache import AsyncLRU, AsyncTTL
 async def func(wait: int):
     await asyncio.sleep(wait)
 
+@AsyncLRU(maxsize=128)
+async def cache_clear_fn(wait: int):
+    await asyncio.sleep(wait)
+
 
 class TestClassFunc:
     @AsyncLRU(maxsize=128)
@@ -104,9 +108,30 @@ def test_cache_refreshing_lru():
     assert t1 - t3 <= 0.1
 
 
+def test_cache_clear():
+    # print("call function. Cache miss.")
+    t1 = time.time()
+    asyncio.get_event_loop().run_until_complete(cache_clear_fn(1))
+    t2 = time.time()
+    # print("call function again. Cache hit")
+    asyncio.get_event_loop().run_until_complete(cache_clear_fn(1))
+    t3 = time.time()
+    cache_clear_fn.cache_clear()
+    # print("Call cache_clear() to clear the cache.")
+    asyncio.get_event_loop().run_until_complete(cache_clear_fn(1))
+    t4 = time.time()
+    # print("call function third time. Cache miss)")
+
+    assert t2 - t1 > 1, t2 - t1 # Cache miss
+    assert t3 - t2 < 1, t3 - t2 # Cache hit
+    assert t4 - t3 > 1, t4 - t3 # Cache miss
+
+
+
 if __name__ == "__main__":
     test()
     test_obj_fn()
     test_class_fn()
     test_skip_args()
     test_cache_refreshing_lru()
+    test_cache_clear()
