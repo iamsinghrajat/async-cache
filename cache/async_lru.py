@@ -10,6 +10,14 @@ class AsyncLRU:
         self.lru = LRU(maxsize=maxsize)
         
     def cache_clear(self):
+        """
+        Clears the LRU cache.
+
+        This method empties the cache, removing all stored
+        entries and effectively resetting the cache.
+
+        :return: None
+        """
         self.lru.clear()
 
     def __call__(self, func):

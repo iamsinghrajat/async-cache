@@ -49,6 +49,14 @@ class AsyncTTL:
         self.skip_args = skip_args
 
     def cache_clear(self):
+        """
+        Clears the TTL cache.
+
+        This method empties the cache, removing all stored
+        entries and effectively resetting the cache.
+
+        :return: None
+        """
         self.ttl.clear()
 
     def __call__(self, func):
