@@ -48,6 +48,9 @@ class AsyncTTL:
         self.ttl = self._TTL(time_to_live=time_to_live, maxsize=maxsize)
         self.skip_args = skip_args
 
+    def cache_clear(self):
+        self.ttl.clear()
+
     def __call__(self, func):
         async def wrapper(*args, use_cache=True, **kwargs):
             key = KEY(args[self.skip_args:], kwargs)
@@ -60,5 +63,6 @@ class AsyncTTL:
             return val
 
         wrapper.__name__ += func.__name__
+        wrapper.__dict__['cache_clear'] = self.cache_clear
 
         return wrapper

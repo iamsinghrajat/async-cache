@@ -8,6 +8,9 @@ class AsyncLRU:
         :param maxsize: Use maxsize as None for unlimited size cache
         """
         self.lru = LRU(maxsize=maxsize)
+        
+    def cache_clear(self):
+        self.lru.clear()
 
     def __call__(self, func):
         async def wrapper(*args, use_cache=True, **kwargs):
@@ -19,5 +22,6 @@ class AsyncLRU:
                 return self.lru[key]
 
         wrapper.__name__ += func.__name__
+        wrapper.__dict__['cache_clear'] = self.cache_clear
 
         return wrapper
