@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import copy
 
 
 class LRU(OrderedDict):
@@ -7,7 +8,7 @@ class LRU(OrderedDict):
         super().__init__(*args, **kwargs)
 
     def __getitem__(self, key):
-        value = super().__getitem__(key)
+        value = copy.deepcopy(super().__getitem__(key))
         self.move_to_end(key)
         return value
 
