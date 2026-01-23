@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "async-cache"
+version = "1.2.1"
+description = "an asyncio cache"
+readme = "README.rst"
+requires-python = ">=3.3"
+authors = [{ name = "Rajat Singh", email = "iamsinghrajat@gmail.com" }]
+license = { text = "MIT" }
+keywords = ["asyncio", "lru", "cache", "async", "ttl"]
+
+[project.urls]
+Homepage = "https://github.com/iamsinghrajat/async-cache"
