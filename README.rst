@@ -23,62 +23,100 @@ Installation
 
     pip install async-cache
 
-Basic Usage
------------
+See full documentation at https://async-cache.readthedocs.io/
+
+Core Usage: Function API for Microservices
+------------------------------------------
+
+Use ``AsyncCache`` for flexible caching:
 
 .. code-block:: python
-    
-    # LRU Cache
-    from cache import AsyncLRU
-    
-    @AsyncLRU(maxsize=128)
-    async def func(*args, **kwargs):
-        """
-        maxsize : max number of results that are cached.
-                  if  max limit  is reached the oldest result  is deleted.
-        """
-        pass
-    
-    
-    # TTL Cache
-    from cache import AsyncTTL
-    
-    @AsyncTTL(time_to_live=60, maxsize=1024, skip_args=1)
-    async def func(*args, **kwargs):
-        """
-        time_to_live : max time for which a cached result  is valid (in seconds)
-        maxsize : max number of results that are cached.
-                  if  max limit  is reached the oldest result  is deleted.
-        skip_args : Use `1` to skip first arg of func in determining cache key
-        """
-        pass
 
-    # Supports primitive as well as non-primitive function parameter.
-    # Currently TTL & LRU cache is supported.
+    from cache import AsyncCache
 
-Advanced Usage
---------------
+    cache = AsyncCache(maxsize=1000, default_ttl=300)  # TTL in seconds
+
+    async def get_data(key):
+        return await cache.get(
+            key,
+            loader=lambda: db_query(key),  # auto-caches on miss
+        )
+
+    # Warmup hot keys at startup
+    await cache.warmup({"hot:key": lambda: preload_hot()})
+
+    # Metrics for observability
+    print(cache.get_metrics())  # hits, misses, size, hit_rate
+
+Key Features & Examples
+------------------------
+
+**Thundering Herd Protection**
+    Prevents duplicate work under concurrent load (e.g., popular keys). Without it, 100 misses = 100 DB hits; with it, = 1.
+
+    .. code-block:: python
+
+        cache = AsyncCache()
+        async def loader(): 
+            return await db_query()  # expensive
+        # 100 concurrent -> 1 loader call
+        results = await asyncio.gather(*[cache.get('key', loader=loader) for _ in range(100)])
+
+**DataLoader-Style Batching**
+    Groups concurrent gets into one batch call (reduces DB load; configurable window/size).
+
+    .. code-block:: python
+
+        async def batch_loader(keys):
+            # one DB query for batch
+            return {k: await db_batch_query(k) for k in keys}
+        # auto-groups within 5ms window
+        await asyncio.gather(
+            cache.get(1, batch_loader=batch_loader),
+            cache.get(2, batch_loader=batch_loader)
+        )
+
+**Cache Warmup**
+    Preload at startup to avoid cold misses.
+
+    .. code-block:: python
+
+        await cache.warmup({
+            "user:1": lambda: load_user(1),
+            "config:global": lambda: load_config(),
+        })
+
+**Metrics**
+    Observability for hit rate, size, etc. (global or per-function).
+
+    .. code-block:: python
+
+        metrics = cache.get_metrics()  # or func.get_metrics()
+        # {'hits': 950, 'misses': 50, 'size': 200, 'hit_rate': 0.95}
+        # Use for Prometheus/monitoring
+
+**TTL & Invalidation**
+    Per-key control + size-based eviction.
+
+    .. code-block:: python
+
+        await cache.set('key', value, ttl=60)  # override
+        await cache.delete('key')  # or func.invalidate_cache(args)
+        cache.clear()
+
+Decorator Convenience
+---------------------
+
+For simple/readable code (uses core API under the hood):
 
 .. code-block:: python
-    
-    class CustomDataClass:
-        id: int
-        value: int
-        
-    
-    from cache import AsyncLRU
-    
+
+    from cache import AsyncLRU, AsyncTTL
+
     @AsyncLRU(maxsize=128)
-    async def func(model: "CustomDataClass"):
+    async def func(*args):
         ...
-        # function logic
+
+    @AsyncTTL(time_to_live=60, skip_args=1)  # e.g. skip 'self'
+    async def method(self, arg):
         ...
-    
-    # async-cache will work even if function parameters are:
-    #   1. orm objects
-    #   2. request object
-    #   3. any other custom object type.
-
-
-    # To refresh the function result use the `use_cache=False` param in the function invocation
-    func(*args, use_cache=False, **kwargs)

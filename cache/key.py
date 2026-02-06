@@ -22,3 +22,11 @@ class KEY:
                 return str(param)
 
         return hash(_hash(self.args) + _hash(self.kwargs))
+
+
+def make_key(func, args, kwargs, skip_args=0):
+    """Reusable key: func name + sliced args + kwargs."""
+    func_name = getattr(func, "__qualname__", func.__name__)
+    call_args = args[skip_args:] if skip_args else args
+    inner = KEY(call_args, kwargs)
+    return (func_name, inner)
