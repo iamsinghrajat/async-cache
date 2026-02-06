@@ -8,9 +8,6 @@ async-cache
     :target: https://pypi.python.org/pypi/async-cache
 .. image:: https://static.pepy.tech/personalized-badge/async-cache?period=total&units=international_system&left_color=black&right_color=blue&left_text=Downloads
     :target: https://pepy.tech/project/async-cache
-.. image:: https://snyk.io/advisor/python/async-cache/badge.svg
-    :target: https://snyk.io/advisor/python/async-cache
-    :alt: async-cache
 
 
 
