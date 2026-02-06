@@ -1,6 +1,6 @@
 async-cache
 ===========
-:info: A caching solution for asyncio
+:info: In-memory application layer cache
 
 .. image:: https://img.shields.io/pypi/v/async-cache.svg
     :target: https://pypi.python.org/pypi/async-cache
