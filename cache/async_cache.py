@@ -40,24 +40,39 @@ class AsyncCache:
         self._pending = {}
         self._batch_pending = []
         self._batch_lock = asyncio.Lock()
+        self._pending_lock = asyncio.Lock()  # protects thundering herd (single loader pending) from races under concurrency
         self._batch_timer = None
         self.hits = 0
         self.misses = 0
 
     async def get(self, key, loader=None, batch_loader=None, ttl=None):
+        """Get from cache, loader on miss, with thundering herd protection for concurrent misses on same key.
+        Uses _pending_lock to avoid race conditions when multiple async tasks (e.g., HTTP requests) miss simultaneously.
+        Only one loader executes; others await the future result. Batch mode for multi-key.
+        """
         if key in self.cache:
             self.hits += 1
             return self.cache[key]
-        # miss
+        # cache miss (count all concurrent misses)
         self.misses += 1
         if loader is None and batch_loader is None:
             return None
         if loader is not None:
-            # single loader with herd protection
-            if key in self._pending:
-                return await self._pending[key]
-            fut = asyncio.Future()
-            self._pending[key] = fut
+            # single loader with herd protection (lock to prevent race under true concurrency)
+            async with self._pending_lock:
+                if key in self._pending:
+                    # waiter: future already set by leader
+                    fut = self._pending[key]
+                    is_leader = False
+                else:
+                    # leader: create fut
+                    fut = asyncio.Future()
+                    self._pending[key] = fut
+                    is_leader = True
+            if not is_leader:
+                # await result from leader (protected)
+                return await fut
+            # leader only: perform load (lock released to avoid serializing loads)
             try:
                 value = await loader()
                 ttl_arg = _SENTINEL if ttl is None else ttl
@@ -68,7 +83,9 @@ class AsyncCache:
                 fut.set_exception(exc)
                 raise
             finally:
-                self._pending.pop(key, None)
+                # cleanup under lock
+                async with self._pending_lock:
+                    self._pending.pop(key, None)
         # batch_loader mode
         return await self._batch_get(key, batch_loader, ttl)
 

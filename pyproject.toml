@@ -14,3 +14,7 @@ keywords = ["asyncio", "lru", "cache", "async", "ttl"]
 
 [project.urls]
 Homepage = "https://github.com/iamsinghrajat/async-cache"
+
+[tool.setuptools]
+packages = ["cache"]
+py-modules = []

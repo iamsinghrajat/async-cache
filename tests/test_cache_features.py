@@ -38,7 +38,12 @@ class TestCacheFeatures(unittest.TestCase):
             tasks = [cache.get('k', loader=loader) for _ in range(10)]
             results = await asyncio.gather(*tasks)
             self.assertEqual(len(set(results)), 1)
-            self.assertEqual(calls, 1)
+            self.assertEqual(calls, 1)  # herd protection: only 1 load despite 10 concurrent
+            m = cache.get_metrics()
+            # all 10 were cache misses (concurrent, no prior hit), but protected load
+            self.assertEqual(m['misses'], 10)
+            self.assertEqual(m['hits'], 0)
+            self.assertEqual(m['size'], 1)
         asyncio.run(_test())
 
     def test_batching(self):

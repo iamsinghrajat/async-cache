@@ -117,3 +117,24 @@ For simple/readable code (uses core API under the hood):
     @AsyncTTL(time_to_live=60, skip_args=1)  # e.g. skip 'self'
     async def method(self, arg):
         ...
+
+Testing UI & Demo Microservice
+------------------------------
+
+To interactively test all features (decorators, direct cache, params like max_size/ttl/skip_args/use_cache, thundering herd, batch loader, metrics, warmup, etc.):
+
+.. code-block:: shell
+
+    # From repo root (uses venv with deps)
+    demo/venv/bin/uvicorn demo.app:app --host 0.0.0.0 --port 8000
+
+Then open http://localhost:8000 in browser.
+
+- Configure params
+- Run 5 collections of 100 parallel requests per mode to test features via metrics (hit ratio, misses) and timings
+- Includes @AsyncTTL, @AsyncLRU, direct AsyncCache
+
+The UI is plain HTML/JS + FastAPI microservice for easy testing.
+
+Note: Also fixed race in herd protection for concurrent scenarios.
+
