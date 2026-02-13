@@ -24,14 +24,14 @@ class AsyncLRU:
 
     def __call__(self, func):
         # thin wrapper using core AsyncCache; key via make_key (respects skip_args for parity with AsyncTTL)
+        # !use_cache (force-miss/refresh): delete key then get (ensures miss count in metrics + reload)
         async def wrapper(*args, use_cache=True, **kwargs):
             key = make_key(func, args, kwargs, self.skip_args)
             if not use_cache:
-                # force refresh: compute + store
-                val = await func(*args, **kwargs)
-                self.cache.set(key, val)
-                return val
-            # get (with loader on miss)
+                # force refresh: invalidate to trigger miss, then get+load (for correct metrics)
+                self.cache.delete(key)
+                # fallthrough to get below
+            # get (with loader on miss; now covers force-miss case too)
             async def loader():
                 return await func(*args, **kwargs)
             return await self.cache.get(key, loader=loader)

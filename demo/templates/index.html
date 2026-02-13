@@ -52,18 +52,22 @@
             <button class="tab-btn" onclick="switchMode('lru')">@AsyncLRU Decorator</button>
             <button class="tab-btn" onclick="switchMode('cache')">Direct AsyncCache</button>
         </div>
+        <!-- use_cache flag: decorator-only (not for direct AsyncCache) -->
+        <div id="use-cache-section">
+            <label><input id="use_cache_default" type="checkbox" checked> Use Cache (force-miss=false; decorator-only param)</label>
+        </div>
     </div>
 
     <!-- Test Collections - 5 collections for different features -->
     <div id="mode-ttl" class="section mode-section active">
         <h2>Test @AsyncTTL Decorator</h2>
-        <p>Tests herd protection (same key), batch not direct here (single loader), skip_args, TTL expiry, use_cache=false.</p>
+        <p>Decorator-only: herd (single-loader), skip_args, TTL expiry, use_cache (force-miss flag below).</p>
         <div id="ttl-collections"></div>
     </div>
 
     <div id="mode-lru" class="section mode-section">
         <h2>Test @AsyncLRU Decorator</h2>
-        <p>Similar to TTL but no expiry/TTL. Good for hit/miss ratios.</p>
+        <p>Decorator-only: herd, skip_args (now supported), LRU eviction, use_cache flag (no TTL).</p>
         <div id="lru-collections"></div>
     </div>
 
@@ -86,15 +90,34 @@
     </div>
 
     <script>
-        // 5 collections of 100 requests with diff key combos to test features
-        // Custom keys override via form (e.g., for warmup-specific keys).
+        // Mode-specific collections (decorators: single-loader/herd/use_cache/TTL/LRU; direct: batch vs single, warmup etc.)
+        // Custom keys override via form (for any test e.g. warmup keys).
         // Note: 100ms mock DB sleep on misses; batch/herd ensures ~1 DB call (timing proves protection).
-        const collections = {
-            1: {name: "1. All Same Key (Tests Thundering Herd Protection)", keys: Array(100).fill('same-key') },
-            2: {name: "2. 100 Unique Keys (Tests Batch Data Loader)", keys: Array.from({length: 100}, (_, i) => `unique-key-${i}`) },
-            3: {name: "3. Mixed Keys (50 same + 50 unique - mix herd + batch)", keys: [...Array(50).fill('mixed-key'), ...Array.from({length: 50}, (_, i) => `mix-${i}`)] },
-            4: {name: "4. Force Misses (use_cache=false x100 - bypass cache)", keys: Array.from({length: 100}, (_, i) => `force-${i}`), force_miss: true },
-            5: {name: "5. Repeat Keys After Load (Expect high hit ratio)", keys: Array(100).fill('repeat-key') }  // run after other to see hits
+        // TTL/Lru: 4-5 unique tests; direct: 7 incl. batch variants.
+        const modeCollections = {
+            ttl: [
+                {name: "1. All Same Key (Thundering Herd Prot.)", keys: Array(100).fill('ttl-same') },
+                {name: "2. 100 Unique Keys (Herd + TTL expiry)", keys: Array.from({length: 100}, (_, i) => `ttl-unique-${i}`) },
+                {name: "3. Mixed Keys (Herd mix)", keys: [...Array(50).fill('ttl-mixed'), ...Array.from({length: 50}, (_, i) => `ttl-mix-${i}`)] },
+                {name: "4. Force Misses (use_cache=false x100)", keys: Array.from({length: 100}, (_, i) => `ttl-force-${i}`), force_miss: true },
+                {name: "5. Repeat Keys (High hit ratio post-miss)", keys: Array(100).fill('ttl-repeat') }
+            ],
+            lru: [
+                {name: "1. All Same Key (Herd Prot. - LRU eviction test)", keys: Array(100).fill('lru-same') },
+                {name: "2. 100 Unique Keys (LRU maxsize test)", keys: Array.from({length: 100}, (_, i) => `lru-unique-${i}`) },
+                {name: "3. Mixed Keys (Herd in LRU)", keys: [...Array(50).fill('lru-mixed'), ...Array.from({length: 50}, (_, i) => `lru-mix-${i}`)] },
+                {name: "4. Force Misses (use_cache=false)", keys: Array.from({length: 100}, (_, i) => `lru-force-${i}`), force_miss: true },
+                {name: "5. Repeat After Clear (Hit ratio reset)", keys: Array(100).fill('lru-repeat') }  // pair w/ clear for demo
+            ],
+            cache: [
+                {name: "1. Same Key (Herd Prot.)", keys: Array(100).fill('cache-same') },
+                {name: "2. 100 Unique (Batch Loader - 1 DB call)", keys: Array.from({length: 100}, (_, i) => `cache-unique-${i}`) },
+                {name: "3. Mixed Keys (Batch + Herd)", keys: [...Array(50).fill('cache-mixed'), ...Array.from({length: 50}, (_, i) => `cache-mix-${i}`)] },
+                {name: "4. Force Misses (direct get)", keys: Array.from({length: 100}, (_, i) => `cache-force-${i}`) },
+                {name: "5. Repeat Keys (Hit ratio)", keys: Array(100).fill('cache-repeat') },
+                {name: "6. Batch vs Single: Unique Keys (Batch on)", keys: Array.from({length: 50}, (_, i) => `cache-batch-${i}`) },
+                {name: "7. Warmup Keys (Preload test)", keys: Array.from({length: 20}, (_, i) => `warm-${i}`) }
+            ]
         };
 
         // Parse custom keys from UI (supports comma-sep, 'same-key', or 'unique:N' for N unique keys)
@@ -113,31 +136,37 @@
             return Array(100).fill(input);  // default 100x same for herd etc.
         }
 
-        // Create buttons for each collection per mode
+        // Create buttons for each collection per mode (unique per interface: decorators single/herd/use_cache, direct batch/single)
         function createCollectionButtons(containerId, mode) {
             const container = document.getElementById(containerId);
-            Object.keys(collections).forEach(id => {
-                const coll = collections[id];
+            modeCollections[mode].forEach((coll, idx) => {
                 const btn = document.createElement('button');
                 btn.className = 'collection-btn';
                 btn.textContent = coll.name;
-                btn.onclick = () => runCollectionTest(mode, parseInt(id));
+                btn.onclick = () => runCollectionTest(mode, idx);
                 container.appendChild(btn);
                 container.appendChild(document.createElement('br'));
             });
         }
 
-        // Init buttons
+        // Init buttons (mode-specific)
         createCollectionButtons('ttl-collections', 'ttl');
         createCollectionButtons('lru-collections', 'lru');
         createCollectionButtons('cache-collections', 'cache');
 
-        // Tab switch
+        // Tab switch + UI toggle for mode-specific params:
+        // - use_cache checkbox: only for decorators (@TTL/@LRU)
+        // - batch checkbox: only for direct
+        // - Collections unique per interface
         function switchMode(mode) {
             document.querySelectorAll('.mode-section').forEach(sec => sec.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(`mode-${mode}`).classList.add('active');
             document.querySelector(`.tab-btn[onclick="switchMode('${mode}')"]`).classList.add('active');
+            // Toggle use_cache (decorator-only)
+            const useCacheSec = document.getElementById('use-cache-section');
+            useCacheSec.style.display = (mode === 'cache') ? 'none' : 'block';
+            // Batch checkbox in cache section only (already)
         }
 
         // Get config from form
@@ -171,9 +200,10 @@
         }
 
         // Run 100 parallel requests for a collection (simulates concurrent load for herd/batch)
+        // Mode-specific: decorators (use_cache/herd/single); direct (batch flag).
         // Supports custom keys; batch config; metrics ONLY from API; results show LAST test only.
         async function runCollectionTest(mode, collId) {
-            const coll = collections[collId];
+            const coll = modeCollections[mode][collId];
             const keys = getKeysForTest(coll);  // custom override e.g. for warmup keys
             const useBatch = (mode === 'cache') && document.getElementById('use_batch').checked;
             const defaultUseCache = document.getElementById('use_cache_default').checked;
@@ -182,10 +212,18 @@
             const cacheType = mode === 'cache' ? 'direct' : mode;
             const startTime = performance.now();
             // Send requests IN PARALLEL using Promise.all + fetch (demo herd/batch under concurrency)
+            // use_cache: decorator-only (@TTL/@LRU); direct always 'true' (no param)
+            // Batch flag: direct-only; fixed to use dataloader when enabled
             const requests = keys.map(key => {
-                const use_cache = !force_miss && defaultUseCache;
-                const body = {key, use_cache};
-                if (mode === 'cache') body.use_batch = useBatch;
+                const body = {key};
+                if (mode !== 'cache') {
+                    // decorator-only
+                    const use_cache = !force_miss && defaultUseCache;
+                    body.use_cache = use_cache;
+                }
+                if (mode === 'cache') {
+                    body.use_batch = useBatch;  // true= batch_loader (fix: was inverted in wiring)
+                }
                 return fetch(`/call/${mode}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -199,7 +237,7 @@
             const metrics = await metricsResp.json();
             const summary = `Test: ${coll.name} | Mode: ${mode}${useBatch ? '-batch' : ''} | Keys: ${keys.length} (custom: ${!!parseCustomKeys()}) | Time: ${elapsed}ms\n` +
                            `Metrics (from API): Hits=${metrics.hits}, Misses=${metrics.misses}, Hit Rate=${(metrics.hit_rate*100).toFixed(2)}%, Size=${metrics.size}\n` +
-                           `Note: All-miss OK for concurrent (DB calls minimized by herd/batch: 100ms vs 10s)`;
+                           `Note: All-miss OK for concurrent/first-run (DB calls minimized by herd/batch: ~100ms vs. 10s)`;
             setResult(summary);
             console.log('Results sample:', results.slice(0, 5));  // log full if needed
         }
