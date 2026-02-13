@@ -32,12 +32,14 @@
     <!-- Config Section -->
     <div class="section">
         <h2>Cache Configuration</h2>
+        <p class="warn">Configure params; batch dataloader (direct mode checkbox below); skip_args now works on LRU too; custom keys; 100ms mock DB sleep on misses.</p>
         <label>Max Size: <input id="maxsize" type="number" value="128" min="1"></label>
         <label>TTL (seconds, empty for none): <input id="ttl" type="number" value="60" min="0" placeholder="60 or empty"></label>
-        <label>Skip Args (for TTL key): <input id="skip_args" type="number" value="0" min="0"></label>
+        <label>Skip Args (now for TTL+LRU keys): <input id="skip_args" type="number" value="0" min="0"></label>
         <label>Batch Window (ms): <input id="batch_window_ms" type="number" value="5" min="1"></label>
         <label>Max Batch Size: <input id="max_batch_size" type="number" value="100" min="1"></label>
         <label><input id="use_cache_default" type="checkbox" checked> Default Use Cache</label>
+        <label>Custom Keys (comma-sep, e.g. 'same-key' or 'unique-1,unique-2' or 'unique:50' for N uniques): <input id="custom_keys" type="text" value="" placeholder="leave empty for collection defaults"></label>
         <button onclick="configureCache()">Apply Configuration</button>
         <button class="clear-btn" onclick="clearAllCaches()">Clear All Caches</button>
     </div>
@@ -67,8 +69,8 @@
 
     <div id="mode-cache" class="section mode-section">
         <h2>Test Direct AsyncCache Class</h2>
-        <p>Full features: batch_loader (for unique keys), single_loader (herd), warmup, set, delete, metrics.</p>
-        <label><input id="use_batch" type="checkbox"> Use Batch Loader (for batch tests)</label>
+        <p>Full features: batch dataloader (configurable), single-loader (herd prot), warmup, set/delete, metrics, etc.</p>
+        <label><input id="use_batch" type="checkbox"> Use Batch Data Loader (for unique keys test; 1 DB call vs. 100)</label>
         <div id="cache-collections"></div>
         <hr>
         <h3>Additional Features</h3>
@@ -78,19 +80,38 @@
 
     <!-- Results -->
     <div class="section">
-        <h2>Results & Metrics</h2>
+        <h2>Results & Metrics (Last Test Run Only)</h2>
+        <p class="warn">Metrics ONLY from /metrics API. For all-miss cases (e.g., concurrent same/unique keys): misses=N is correct (cache semantics); herd/batch protects DB load (see timing: ~100ms vs. 10s for 100 misses). Custom keys override collections.</p>
         <div id="results" class="results">Run a test to see metrics (hit ratio, hits, misses) here...</div>
     </div>
 
     <script>
         // 5 collections of 100 requests with diff key combos to test features
+        // Custom keys override via form (e.g., for warmup-specific keys).
+        // Note: 100ms mock DB sleep on misses; batch/herd ensures ~1 DB call (timing proves protection).
         const collections = {
-            1: {name: "1. All Same Key (Tests Thundering Herd Protection - expect ~1 miss)", keys: Array(100).fill('same-key') },
-            2: {name: "2. 100 Unique Keys (Tests Batch Data Loader - expect all misses in 1 batch)", keys: Array.from({length: 100}, (_, i) => `unique-key-${i}`) },
+            1: {name: "1. All Same Key (Tests Thundering Herd Protection)", keys: Array(100).fill('same-key') },
+            2: {name: "2. 100 Unique Keys (Tests Batch Data Loader)", keys: Array.from({length: 100}, (_, i) => `unique-key-${i}`) },
             3: {name: "3. Mixed Keys (50 same + 50 unique - mix herd + batch)", keys: [...Array(50).fill('mixed-key'), ...Array.from({length: 50}, (_, i) => `mix-${i}`)] },
             4: {name: "4. Force Misses (use_cache=false x100 - bypass cache)", keys: Array.from({length: 100}, (_, i) => `force-${i}`), force_miss: true },
             5: {name: "5. Repeat Keys After Load (Expect high hit ratio)", keys: Array(100).fill('repeat-key') }  // run after other to see hits
         };
+
+        // Parse custom keys from UI (supports comma-sep, 'same-key', or 'unique:N' for N unique keys)
+        // Used for any test incl. warmup (e.g., specify exact keys).
+        function parseCustomKeys() {
+            const input = document.getElementById('custom_keys').value.trim();
+            if (!input) return null;  // fallback to collection defaults
+            if (input.startsWith('unique:')) {
+                const n = parseInt(input.split(':')[1]) || 100;
+                return Array.from({length: n}, (_, i) => `unique-key-${i}`);
+            }
+            if (input.includes(',')) {
+                return input.split(',').map(k => k.trim());
+            }
+            // e.g., single/same-key
+            return Array(100).fill(input);  // default 100x same for herd etc.
+        }
 
         // Create buttons for each collection per mode
         function createCollectionButtons(containerId, mode) {
@@ -139,20 +160,29 @@
                 body: JSON.stringify(config)
             });
             const data = await resp.json();
-            appendResult(`Configured: ${JSON.stringify(data.config, null, 2)}`);
+            setResult(`Configured: ${JSON.stringify(data.config, null, 2)}`);
+        }
+
+        // Get keys for test: custom from UI if provided (for warmup etc.), else collection default
+        function getKeysForTest(coll) {
+            const custom = parseCustomKeys();
+            if (custom) return custom;
+            return coll.keys;
         }
 
         // Run 100 parallel requests for a collection (simulates concurrent load for herd/batch)
+        // Supports custom keys; batch config; metrics ONLY from API; results show LAST test only.
         async function runCollectionTest(mode, collId) {
             const coll = collections[collId];
+            const keys = getKeysForTest(coll);  // custom override e.g. for warmup keys
             const useBatch = (mode === 'cache') && document.getElementById('use_batch').checked;
             const defaultUseCache = document.getElementById('use_cache_default').checked;
             const force_miss = coll.force_miss || false;
             await configureCache();  // ensure config
             const cacheType = mode === 'cache' ? 'direct' : mode;
             const startTime = performance.now();
-            // Send 100 requests IN PARALLEL using Promise.all + fetch
-            const requests = coll.keys.map(key => {
+            // Send requests IN PARALLEL using Promise.all + fetch (demo herd/batch under concurrency)
+            const requests = keys.map(key => {
                 const use_cache = !force_miss && defaultUseCache;
                 const body = {key, use_cache};
                 if (mode === 'cache') body.use_batch = useBatch;
@@ -164,26 +194,31 @@
             });
             const results = await Promise.all(requests);
             const elapsed = (performance.now() - startTime).toFixed(2);
-            // Get metrics after to show hit ratio, misses
+            // Get metrics after to show hit ratio, misses (ONLY from metrics API)
             const metricsResp = await fetch(`/metrics/${cacheType}`);
             const metrics = await metricsResp.json();
-            const summary = `Test: ${coll.name} | Mode: ${mode}${useBatch ? '-batch' : ''} | Time: ${elapsed}ms\n` +
-                           `Metrics: Hits=${metrics.hits}, Misses=${metrics.misses}, Hit Rate=${(metrics.hit_rate*100).toFixed(2)}%, Size=${metrics.size}`;
-            appendResult(summary);
+            const summary = `Test: ${coll.name} | Mode: ${mode}${useBatch ? '-batch' : ''} | Keys: ${keys.length} (custom: ${!!parseCustomKeys()}) | Time: ${elapsed}ms\n` +
+                           `Metrics (from API): Hits=${metrics.hits}, Misses=${metrics.misses}, Hit Rate=${(metrics.hit_rate*100).toFixed(2)}%, Size=${metrics.size}\n` +
+                           `Note: All-miss OK for concurrent (DB calls minimized by herd/batch: 100ms vs 10s)`;
+            setResult(summary);
             console.log('Results sample:', results.slice(0, 5));  // log full if needed
         }
 
-        // Additional: Warmup test
+        // Additional: Warmup test (uses custom keys if provided in config, else defaults)
         async function testWarmup() {
             await configureCache();
-            const keys = Array.from({length: 20}, (_, i) => `warmup-key-${i}`);
+            // Override with custom or default
+            let keys = parseCustomKeys();
+            if (!keys) {
+                keys = Array.from({length: 20}, (_, i) => `warmup-key-${i}`);
+            }
             const resp = await fetch('/warmup/cache', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({keys})
             });
             const data = await resp.json();
-            appendResult(`Warmup: ${data.status} for ${data.keys.length} keys. Metrics: ${JSON.stringify(data.metrics)}`);
+            setResult(`Warmup: ${data.status} for ${data.keys.length} keys (custom: ${!!parseCustomKeys()}). Metrics (from API): ${JSON.stringify(data.metrics)}`);
         }
 
         // Test set/get/delete
@@ -200,7 +235,7 @@
             const get2Resp = await fetch('/call/cache', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({key: 'test-key'})});
             const get2Data = await get2Resp.json();
             const metrics = await (await fetch('/metrics/direct')).json();
-            appendResult(`Set/Get/Delete Test: set='set-value', get1=${getData.result}, after-delete get2=${get2Data.result}\nMetrics: ${JSON.stringify(metrics)}`);
+            setResult(`Set/Get/Delete Test: set='set-value', get1=${getData.result}, after-delete get2=${get2Data.result}\nMetrics (from API): ${JSON.stringify(metrics)}`);
         }
 
         // Clear all
@@ -208,20 +243,21 @@
             ['ttl', 'lru', 'direct'].forEach(async (t) => {
                 await fetch(`/clear/${t}`, {method: 'POST'});
             });
-            appendResult('All caches cleared.');
+            setResult('All caches cleared.');
         }
 
-        // Append to results
-        function appendResult(text) {
+        // Set result (LAST test only, no append)
+        function setResult(text) {
             const resDiv = document.getElementById('results');
-            resDiv.textContent += '\n---\n' + text;
-            resDiv.scrollTop = resDiv.scrollHeight;  // auto scroll
+            resDiv.textContent = '--- Last Run ---\n' + text;
+            // auto scroll if needed
+            resDiv.scrollTop = resDiv.scrollHeight;
         }
 
         // Initial config
         window.onload = () => {
             configureCache();
-            appendResult('UI loaded. Apply config and run tests to see caching in action!');
+            setResult('UI loaded. Apply config, use custom keys, run tests (DB sleep=100ms on misses; batch/herd via timing/metrics).');
         };
     </script>
 </body>

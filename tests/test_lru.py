@@ -26,6 +26,12 @@ class TestClassFunc:
     async def skip_arg_func(arg: int, wait: int):
         await asyncio.sleep(wait)
 
+    # Test skip_args on LRU too (parity)
+    @staticmethod
+    @AsyncLRU(maxsize=128, skip_args=1)
+    async def lru_skip_arg_func(arg: int, wait: int):
+        await asyncio.sleep(wait)
+
     @classmethod
     @AsyncLRU(maxsize=128)
     async def class_func(cls, wait: int):
@@ -68,10 +74,23 @@ class TestAsyncLRU(unittest.TestCase):
         self.assertLess(t_second, 4000)
 
     def test_skip_args(self):
+        # Tests skip on TTL (legacy) + now LRU
         t1 = time.time()
         asyncio.get_event_loop().run_until_complete(TestClassFunc.skip_arg_func(5, 4))
         t2 = time.time()
         asyncio.get_event_loop().run_until_complete(TestClassFunc.skip_arg_func(6, 4))
+        t3 = time.time()
+        t_first = (t2 - t1) * 1000
+        t_second = (t3 - t2) * 1000
+        self.assertGreater(t_first, 4000)
+        self.assertLess(t_second, 4000)
+
+    def test_skip_args_lru(self):
+        # Verify skip_args on @AsyncLRU: diff first arg ignored in key, so hits despite arg change
+        t1 = time.time()
+        asyncio.get_event_loop().run_until_complete(TestClassFunc.lru_skip_arg_func(5, 4))
+        t2 = time.time()
+        asyncio.get_event_loop().run_until_complete(TestClassFunc.lru_skip_arg_func(6, 4))  # skips arg=6, hits
         t3 = time.time()
         t_first = (t2 - t1) * 1000
         t_second = (t3 - t2) * 1000

@@ -30,13 +30,16 @@ class CacheConfig(BaseModel):
     # use_cache per call, not global
 
 async def simulate_data_load(key: str) -> str:
-    """Simulate async data load (e.g., DB/API call) with latency to demo caching."""
-    await asyncio.sleep(0.05)  # ~50ms latency
+    """Simulate async data load (e.g., DB/API call) with 100ms latency to demo caching.
+    On cache miss + single-loader: N calls (e.g., 100 * 100ms = 10s for unique keys).
+    Herd protection or batch_loader: ~100ms total (1 DB call).
+    """
+    await asyncio.sleep(0.1)  # 100ms to resemble real DB call
     return f"data-for-{key}"
 
 async def simulate_batch_load(keys: List[str]) -> List[str]:
-    """Simulate batch data loader."""
-    await asyncio.sleep(0.05)
+    """Simulate batch data loader (single DB call for multiple keys, ~100ms total)."""
+    await asyncio.sleep(0.1)  # 100ms for the batch
     return [f"data-for-{k}" for k in keys]
 
 @app.get("/")
@@ -47,7 +50,7 @@ async def root(request: Request):
 @app.post("/configure")
 async def configure(config: CacheConfig = Body(...)):
     """Configure/recreate caches and decorated functions based on UI params.
-    This allows testing different max_size, ttl, skip_args, etc.
+    This allows testing different max_size, ttl, skip_args (now on LRU too), batch_*, use_cache etc.
     """
     global ttl_decorator, lru_decorator, direct_cache, ttl_func, lru_func
 
@@ -65,11 +68,12 @@ async def configure(config: CacheConfig = Body(...)):
 
     ttl_func = _ttl_func
 
-    # LRU decorator
-    lru_decorator = AsyncLRU(maxsize=config.maxsize)
+    # LRU decorator (now supports skip_args for parity with AsyncTTL)
+    lru_decorator = AsyncLRU(maxsize=config.maxsize, skip_args=config.skip_args)
 
     @lru_decorator
     async def _lru_func(key: str):
+        # The wrapped func; key made by decorator using make_key (respects skip_args)
         return await simulate_data_load(key)
 
     lru_func = _lru_func
