@@ -80,5 +80,48 @@ class TestCacheFeatures(unittest.TestCase):
         asyncio.run(_test())
 
 
+    def test_key_stability(self):
+        """Test KEY/make_key fixes for bugs:
+        - Pre-fix: __eq__ hash-only (violated contract), unstable hash (dict order/str, kwargs mut), non-robust objs.
+        - Now: stable eq/hash, no mutation, sorted recursive.
+        Catches e.g. dict order, obj vars, use_cache pop side-effect.
+        """
+        from cache.key import KEY, make_key, _to_hashable
+
+        # eq/hash contract (pre-fix: a==b but hash differ possible)
+        k1 = KEY((1, 'a'), {'b': 2, 'use_cache': True})
+        k2 = KEY((1, 'a'), {'b': 2})  # equiv after pop/sort
+        self.assertEqual(k1, k2)
+        self.assertEqual(hash(k1), hash(k2))  # must hold
+
+        # dict stability (pre-fix: items() order unstable)
+        d1 = {'z': 1, 'a': 2}
+        d2 = {'a': 2, 'z': 1}
+        self.assertEqual(_to_hashable(d1), _to_hashable(d2))
+
+        # obj stability
+        class Obj:
+            def __init__(self, x): self.x = x
+        o1 = Obj(10)
+        self.assertEqual(_to_hashable(o1), _to_hashable(o1))  # sorted vars
+
+        # no mutation side-effect (pre-fix: pop on input kwargs)
+        kw = {'use_cache': False, 'x': 1}
+        KEY((), kw)
+        self.assertIn('use_cache', kw)  # untouched
+
+        # make_key + skip, complex
+        async def dummy(a, b, use_cache=True): pass
+        key1 = make_key(dummy, (1, 2, 3), {'use_cache': True}, skip_args=1)  # skips '1'
+        key2 = make_key(dummy, (99, 2, 3), {'use_cache': False}, skip_args=1)  # same after skip
+        self.assertEqual(key1, key2)  # func + KEY((2,3), ())
+        # different skip
+        key_diff = make_key(dummy, (1, 2, 3), {}, skip_args=0)
+        self.assertNotEqual(key1, key_diff)
+
+        # used in cache (e.g. herd/batch keys stable)
+        # (implicit via other tests)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -105,33 +105,43 @@
     </div>
 
     <script>
-        // Mode-specific collections (decorators: single-loader/herd/use_cache/TTL/LRU; direct: batch vs single, warmup etc.)
-        // Custom keys override via form (for any test e.g. warmup keys).
-        // Note: 100ms mock DB sleep on misses; batch/herd ensures ~1 DB call (timing proves protection).
-        // TTL/Lru: 4-5 unique tests; direct: 7 incl. batch variants.
+        // Mode-specific collections inspired by unit tests (test_lru.py/test_ttl.py/test_cache_features.py):
+        // - Decorators: obj/methods/skip/refresh/clear/invalidate, eviction (LRU small size), TTL expiry sim.
+        // - Direct: herd/batch/warmup (expanded).
+        // Custom keys override; set config (e.g. maxsize=5 for LRU eviction, low ttl for expiry) before run.
+        // Note: 100ms DB sleep; timing + metrics demo (e.g. hits=0 if uniques > maxsize).
         const modeCollections = {
             ttl: [
-                {name: "1. All Same Key (Thundering Herd Prot.)", keys: Array(100).fill('ttl-same') },
-                {name: "2. 100 Unique Keys (Herd + TTL expiry)", keys: Array.from({length: 100}, (_, i) => `ttl-unique-${i}`) },
+                {name: "1. All Same Key (Thundering Herd)", keys: Array(100).fill('ttl-same') },
+                {name: "2. 100 Unique Keys (Herd + TTL expiry sim)", keys: Array.from({length: 100}, (_, i) => `ttl-unique-${i}`) },
                 {name: "3. Mixed Keys (Herd mix)", keys: [...Array(50).fill('ttl-mixed'), ...Array.from({length: 50}, (_, i) => `ttl-mix-${i}`)] },
-                {name: "4. Force Misses (use_cache=false x100)", keys: Array.from({length: 100}, (_, i) => `ttl-force-${i}`), force_miss: true },
-                {name: "5. Repeat Keys (High hit ratio post-miss)", keys: Array(100).fill('ttl-repeat') }
+                {name: "4. Force Misses (use_cache=false)", keys: Array.from({length: 100}, (_, i) => `ttl-force-${i}`), force_miss: true },
+                {name: "5. Repeat Keys (High hit ratio)", keys: Array(100).fill('ttl-repeat') },
+                // TTL-inspired (test_ttl.py): vary ttl for expiry/hits
+                {name: "6. Low TTL Expiry (set ttl=1s + repeat after wait)", keys: Array(10).fill('ttl-expiry') },
+                {name: "7. Skip Args (set skip=1 for multi-arg)", keys: Array(50).fill('ttl-skip') }
             ],
             lru: [
-                {name: "1. All Same Key (Herd Prot. - LRU eviction test)", keys: Array(100).fill('lru-same') },
+                {name: "1. All Same Key (Herd)", keys: Array(100).fill('lru-same') },
                 {name: "2. 100 Unique Keys (LRU maxsize test)", keys: Array.from({length: 100}, (_, i) => `lru-unique-${i}`) },
-                {name: "3. Mixed Keys (Herd in LRU)", keys: [...Array(50).fill('lru-mixed'), ...Array.from({length: 50}, (_, i) => `lru-mix-${i}`)] },
+                {name: "3. Mixed Keys (Herd)", keys: [...Array(50).fill('lru-mixed'), ...Array.from({length: 50}, (_, i) => `lru-mix-${i}`)] },
                 {name: "4. Force Misses (use_cache=false)", keys: Array.from({length: 100}, (_, i) => `lru-force-${i}`), force_miss: true },
-                {name: "5. Repeat After Clear (Hit ratio reset)", keys: Array(100).fill('lru-repeat') }  // pair w/ clear for demo
+                {name: "5. Repeat After Clear (Hit reset)", keys: Array(100).fill('lru-repeat') },
+                // LRU-inspired (test_lru.py): eviction if uniques > maxsize, obj/skip/refresh
+                {name: "6. Unique Keys > Maxsize (Eviction; set maxsize=5)", keys: Array.from({length: 20}, (_, i) => `lru-evict-${i}`) },
+                {name: "7. Skip Args (set skip=1; e.g. methods)", keys: Array(50).fill('lru-skip') }
             ],
             cache: [
-                {name: "1. Same Key (Herd Prot.)", keys: Array(100).fill('cache-same') },
-                {name: "2. 100 Unique (Batch Loader - 1 DB call)", keys: Array.from({length: 100}, (_, i) => `cache-unique-${i}`) },
-                {name: "3. Mixed Keys (Batch + Herd)", keys: [...Array(50).fill('cache-mixed'), ...Array.from({length: 50}, (_, i) => `cache-mix-${i}`)] },
-                {name: "4. Force Misses (direct get)", keys: Array.from({length: 100}, (_, i) => `cache-force-${i}`) },
-                {name: "5. Repeat Keys (Hit ratio)", keys: Array(100).fill('cache-repeat') },
-                {name: "6. Batch vs Single: Unique Keys (Batch on)", keys: Array.from({length: 50}, (_, i) => `cache-batch-${i}`) },
-                {name: "7. Warmup Keys (Preload test)", keys: Array.from({length: 20}, (_, i) => `warm-${i}`) }
+                {name: "1. Same Key (Herd)", keys: Array(100).fill('cache-same') },
+                {name: "2. 100 Unique (Batch - 1 DB call)", keys: Array.from({length: 100}, (_, i) => `cache-unique-${i}`) },
+                {name: "3. Mixed (Batch + Herd)", keys: [...Array(50).fill('cache-mixed'), ...Array.from({length: 50}, (_, i) => `cache-mix-${i}`)] },
+                {name: "4. Force Misses (direct)", keys: Array.from({length: 100}, (_, i) => `cache-force-${i}`) },
+                {name: "5. Repeat Keys (Hits)", keys: Array(100).fill('cache-repeat') },
+                {name: "6. Batch vs Single (set batch checkbox)", keys: Array.from({length: 50}, (_, i) => `cache-batch-${i}`) },
+                {name: "7. Warmup Keys (Preload)", keys: Array.from({length: 20}, (_, i) => `warm-${i}`) },
+                // Direct-inspired (test_cache_features): herd/batch/warmup variants
+                {name: "8. Herd Prot. (same key concurrent)", keys: Array(100).fill('cache-herd') },
+                {name: "9. Batch Mixed (multi-batch_loader)", keys: Array.from({length: 150}, (_, i) => `cache-batchmix-${i}`) }  // > max_batch=100
             ]
         };
 
