@@ -23,6 +23,9 @@
         .tabs { margin: 10px 0; }
         .tab-btn { background: #6c757d; }
         .tab-btn.active { background: #007bff; }
+        /* Toggleable param groups based on mode/batch */
+        .param-group { display: block; }
+        .param-group.hidden { display: none; }
     </style>
 </head>
 <body>
@@ -32,14 +35,19 @@
     <!-- Config Section -->
     <div class="section">
         <h2>Cache Configuration</h2>
-        <p class="warn">Configure params; batch dataloader (direct mode checkbox below); skip_args now works on LRU too; custom keys; 100ms mock DB sleep on misses.</p>
+        <p class="warn">Params adapt to interface (e.g., batch_* for direct+batch-dataloader only, skip_args/use_cache for decorators only) + custom keys; 100ms DB sim on misses.</p>
         <label>Max Size: <input id="maxsize" type="number" value="128" min="1"></label>
         <label>TTL (seconds, empty for none): <input id="ttl" type="number" value="60" min="0" placeholder="60 or empty"></label>
-        <label>Skip Args (now for TTL+LRU keys): <input id="skip_args" type="number" value="0" min="0"></label>
-        <label>Batch Window (ms): <input id="batch_window_ms" type="number" value="5" min="1"></label>
-        <label>Max Batch Size: <input id="max_batch_size" type="number" value="100" min="1"></label>
-        <label><input id="use_cache_default" type="checkbox" checked> Default Use Cache</label>
-        <label>Custom Keys (comma-sep, e.g. 'same-key' or 'unique-1,unique-2' or 'unique:50' for N uniques): <input id="custom_keys" type="text" value="" placeholder="leave empty for collection defaults"></label>
+        <!-- skip_args: decorators (@TTL/@LRU) only -->
+        <div id="skip-params" class="param-group">
+            <label>Skip Args (TTL+LRU keys; e.g. skip 'self'): <input id="skip_args" type="number" value="0" min="0"></label>
+        </div>
+        <!-- batch params: direct + batch-dataloader enabled only -->
+        <div id="batch-params" class="param-group">
+            <label>Batch Window (ms): <input id="batch_window_ms" type="number" value="5" min="1"></label>
+            <label>Max Batch Size: <input id="max_batch_size" type="number" value="100" min="1"></label>
+        </div>
+        <label>Custom Keys (comma-sep, e.g. 'same-key' or 'unique:50' for N uniques; overrides collections/warmup): <input id="custom_keys" type="text" value="" placeholder="leave empty for defaults"></label>
         <button onclick="configureCache()">Apply Configuration</button>
         <button class="clear-btn" onclick="clearAllCaches()">Clear All Caches</button>
     </div>
@@ -56,6 +64,13 @@
         <div id="use-cache-section">
             <label><input id="use_cache_default" type="checkbox" checked> Use Cache (force-miss=false; decorator-only param)</label>
         </div>
+    </div>
+
+    <!-- Progress bar for long tests (100 parallel requests) -->
+    <div id="progress-section" class="section" style="display: none;">
+        <h3>Running Test...</h3>
+        <progress id="prog-bar" value="0" max="100" style="width: 100%;"></progress>
+        <span id="prog-text">0% - Sending parallel requests...</span>
     </div>
 
     <!-- Test Collections - 5 collections for different features -->
@@ -154,19 +169,53 @@
         createCollectionButtons('lru-collections', 'lru');
         createCollectionButtons('cache-collections', 'cache');
 
-        // Tab switch + UI toggle for mode-specific params:
-        // - use_cache checkbox: only for decorators (@TTL/@LRU)
-        // - batch checkbox: only for direct
-        // - Collections unique per interface
+        // Tab switch + dynamic params for interface:
+        // - skip_args/use_cache: decorators (@TTL/@LRU) only
+        // - batch_window/max_batch: direct + batch-dataloader enabled only
+        // - use_cache/batch checkboxes, collections unique per mode
+        // - Progress bar for tests
         function switchMode(mode) {
             document.querySelectorAll('.mode-section').forEach(sec => sec.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(`mode-${mode}`).classList.add('active');
             document.querySelector(`.tab-btn[onclick="switchMode('${mode}')"]`).classList.add('active');
-            // Toggle use_cache (decorator-only)
+            // Toggle mode-specific params
+            updateParamsForMode(mode);
+        }
+
+        // Update visible params based on mode (+ batch flag for direct)
+        function updateParamsForMode(mode) {
+            const isDecorator = (mode === 'ttl' || mode === 'lru');
+            const isDirect = (mode === 'cache');
+            const useBatch = isDirect && document.getElementById('use_batch').checked;
+            // use_cache: decorators only
             const useCacheSec = document.getElementById('use-cache-section');
-            useCacheSec.style.display = (mode === 'cache') ? 'none' : 'block';
-            // Batch checkbox in cache section only (already)
+            useCacheSec.style.display = isDecorator ? 'block' : 'none';
+            // skip_args: decorators only
+            document.getElementById('skip-params').classList.toggle('hidden', !isDecorator);
+            // batch params: direct AND batch-dataloader enabled only
+            document.getElementById('batch-params').classList.toggle('hidden', !useBatch);
+            // re-configure on param change for direct batch toggle
+            if (isDirect) {
+                document.getElementById('use_batch').onchange = () => {
+                    updateParamsForMode(mode);
+                    configureCache();  // re-apply for batch_window etc.
+                };
+            }
+        }
+
+        // Show/hide+update progress bar for running tests (100 reqs)
+        function showProgress(percent, text = '') {
+            const progSec = document.getElementById('progress-section');
+            const bar = document.getElementById('prog-bar');
+            const txt = document.getElementById('prog-text');
+            progSec.style.display = 'block';
+            bar.value = percent;
+            txt.textContent = `${percent}% - ${text}`;
+        }
+
+        function hideProgress() {
+            document.getElementById('progress-section').style.display = 'none';
         }
 
         // Get config from form
@@ -202,18 +251,21 @@
         // Run 100 parallel requests for a collection (simulates concurrent load for herd/batch)
         // Mode-specific: decorators (use_cache/herd/single); direct (batch flag).
         // Supports custom keys; batch config; metrics ONLY from API; results show LAST test only.
+        // Progress bar updates during run (config -> parallel reqs -> metrics).
         async function runCollectionTest(mode, collId) {
+            showProgress(10, 'Configuring cache...');
             const coll = modeCollections[mode][collId];
             const keys = getKeysForTest(coll);  // custom override e.g. for warmup keys
             const useBatch = (mode === 'cache') && document.getElementById('use_batch').checked;
             const defaultUseCache = document.getElementById('use_cache_default').checked;
             const force_miss = coll.force_miss || false;
             await configureCache();  // ensure config
+            showProgress(40, `Sending ${keys.length} parallel requests...`);
             const cacheType = mode === 'cache' ? 'direct' : mode;
             const startTime = performance.now();
             // Send requests IN PARALLEL using Promise.all + fetch (demo herd/batch under concurrency)
             // use_cache: decorator-only (@TTL/@LRU); direct always 'true' (no param)
-            // Batch flag: direct-only; fixed to use dataloader when enabled
+            // Batch flag: direct-only; uses dataloader when enabled
             const requests = keys.map(key => {
                 const body = {key};
                 if (mode !== 'cache') {
@@ -222,7 +274,7 @@
                     body.use_cache = use_cache;
                 }
                 if (mode === 'cache') {
-                    body.use_batch = useBatch;  // true= batch_loader (fix: was inverted in wiring)
+                    body.use_batch = useBatch;  // true= batch_loader
                 }
                 return fetch(`/call/${mode}`, {
                     method: 'POST',
@@ -231,6 +283,7 @@
                 }).then(r => r.json());
             });
             const results = await Promise.all(requests);
+            showProgress(80, 'Fetching metrics...');
             const elapsed = (performance.now() - startTime).toFixed(2);
             // Get metrics after to show hit ratio, misses (ONLY from metrics API)
             const metricsResp = await fetch(`/metrics/${cacheType}`);
@@ -240,16 +293,20 @@
                            `Note: All-miss OK for concurrent/first-run (DB calls minimized by herd/batch: ~100ms vs. 10s)`;
             setResult(summary);
             console.log('Results sample:', results.slice(0, 5));  // log full if needed
+            showProgress(100, 'Complete!');
+            setTimeout(hideProgress, 1500);  // hide after brief
         }
 
-        // Additional: Warmup test (uses custom keys if provided in config, else defaults)
+        // Additional: Warmup test (uses custom keys if provided; shows progress)
         async function testWarmup() {
+            showProgress(20, 'Configuring for warmup...');
             await configureCache();
             // Override with custom or default
             let keys = parseCustomKeys();
             if (!keys) {
                 keys = Array.from({length: 20}, (_, i) => `warmup-key-${i}`);
             }
+            showProgress(60, `Warming ${keys.length} keys...`);
             const resp = await fetch('/warmup/cache', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -257,10 +314,13 @@
             });
             const data = await resp.json();
             setResult(`Warmup: ${data.status} for ${data.keys.length} keys (custom: ${!!parseCustomKeys()}). Metrics (from API): ${JSON.stringify(data.metrics)}`);
+            showProgress(100, 'Warmup complete!');
+            setTimeout(hideProgress, 1500);
         }
 
-        // Test set/get/delete
+        // Test set/get/delete (with progress)
         async function testSetGetDelete() {
+            showProgress(30, 'Running set/get/delete...');
             await configureCache();
             // set
             await fetch('/set/cache', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({key: 'test-key', value: 'set-value', ttl: 30})});
@@ -274,14 +334,18 @@
             const get2Data = await get2Resp.json();
             const metrics = await (await fetch('/metrics/direct')).json();
             setResult(`Set/Get/Delete Test: set='set-value', get1=${getData.result}, after-delete get2=${get2Data.result}\nMetrics (from API): ${JSON.stringify(metrics)}`);
+            showProgress(100, 'Complete!');
+            setTimeout(hideProgress, 1500);
         }
 
         // Clear all
         async function clearAllCaches() {
+            showProgress(50, 'Clearing caches...');
             ['ttl', 'lru', 'direct'].forEach(async (t) => {
                 await fetch(`/clear/${t}`, {method: 'POST'});
             });
             setResult('All caches cleared.');
+            hideProgress();
         }
 
         // Set result (LAST test only, no append)
@@ -292,10 +356,12 @@
             resDiv.scrollTop = resDiv.scrollHeight;
         }
 
-        // Initial config
+        // Initial config + param UI + defaults
         window.onload = () => {
             configureCache();
-            setResult('UI loaded. Apply config, use custom keys, run tests (DB sleep=100ms on misses; batch/herd via timing/metrics).');
+            // Default to TTL mode UI
+            updateParamsForMode('ttl');
+            setResult('UI loaded. Params adapt to mode (e.g., batch only for direct+batch-flag); progress bar for tests.');
         };
     </script>
 </body>
