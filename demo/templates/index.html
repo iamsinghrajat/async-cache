@@ -101,7 +101,7 @@
     <!-- Results -->
     <div class="section">
         <h2>Results & Metrics (Last Test Run Only)</h2>
-        <p class="warn">Metrics ONLY from /metrics API. For all-miss cases (concurrent same/unique): misses=N correct (semantics); herd/batch protects load (timing ~100ms). Keys fixed; regen for fresh.</p>
+        <p class="warn">Metrics ONLY from /metrics API (delta for this run). For all-miss cases (concurrent same/unique): misses=N correct (semantics); herd/batch protects load (timing ~100ms). Keys fixed; regen for fresh. maxsize=90 + 100 unique re-run: ~90 hits (eviction).</p>
         <div id="results" class="results">Run a test to see metrics (hit ratio, hits, misses) here...</div>
     </div>
 
@@ -260,10 +260,13 @@
             // NO await configureCache() here (prevents reset; persist for hit on re-run uniques)
             showProgress(40, `Sending ${keys.length} parallel requests...`);
             const cacheType = mode === 'cache' ? 'direct' : mode;
+            // Pre-test metrics (from API only) for per-run delta/ratio
+            const preResp = await fetch(`/metrics/${cacheType}`);
+            const pre = await preResp.json();
             const startTime = performance.now();
             // Send IN PARALLEL
             // use_cache: decorator-only; direct ignores (no force-miss param)
-            // Batch: fixed enabled= batch_loader (opposite prev)
+            // Batch: fixed enabled= batch_loader
             const requests = keys.map(key => {
                 const body = {key};
                 if (mode !== 'cache') {
@@ -272,7 +275,7 @@
                     body.use_cache = use_cache;
                 }
                 if (mode === 'cache') {
-                    body.use_batch = useBatch;  // true = batch (fix inversion)
+                    body.use_batch = useBatch;  // true = batch
                 }
                 return fetch(`/call/${mode}`, {
                     method: 'POST',
@@ -283,12 +286,17 @@
             const results = await Promise.all(requests);
             showProgress(80, 'Fetching metrics...');
             const elapsed = (performance.now() - startTime).toFixed(2);
-            // Metrics from API
-            const metricsResp = await fetch(`/metrics/${cacheType}`);
-            const metrics = await metricsResp.json();
+            // Post-test metrics from API
+            const postResp = await fetch(`/metrics/${cacheType}`);
+            const post = await postResp.json();
+            // Delta for this test (accurate ratio e.g. ~90/100=90% for maxsize=90 + 100 unique re-run; accum totals otherwise)
+            const dHits = post.hits - pre.hits;
+            const dMisses = post.misses - pre.misses;
+            const dTotal = dHits + dMisses;
+            const dRate = dTotal > 0 ? (dHits / dTotal * 100).toFixed(2) : 0;
             const summary = `Test: ${coll.name} | Mode: ${mode}${useBatch ? '-batch' : ''} | Keys: ${keys.length} | Time: ${elapsed}ms\n` +
-                           `Metrics (from API): Hits=${metrics.hits}, Misses=${metrics.misses}, Hit Rate=${(metrics.hit_rate*100).toFixed(2)}%, Size=${metrics.size}\n` +
-                           `Note: First-run=misses OK; re-run same keys=hits (cache persists; clear to reset). Herd/batch: ~100ms vs 10s DB.`;
+                           `This run (from API delta): Hits=${dHits}, Misses=${dMisses}, Hit Rate=${dRate}%, Size=${post.size}\n` +
+                           `Note: maxsize=90 + 100 unique re-run: expect ~90 hits (eviction keeps most-recent; clear resets accum)`;
             setResult(summary);
             console.log('Results sample:', results.slice(0, 5));
             showProgress(100, 'Complete!');

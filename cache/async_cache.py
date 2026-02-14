@@ -157,11 +157,15 @@ class AsyncCache:
         self.cache.pop(key, None)
 
     def clear(self):
-        """Clear under lock in callers."""
+        """Clear under lock in callers; also resets metrics for clean test runs (hits/misses=0)."""
         self.cache.clear()
+        self.hits = 0
+        self.misses = 0
 
     def get_metrics(self):
-        """Metrics under lock in callers for consistency (hits/misses/size)."""
+        """Metrics under lock in callers for consistency (hits/misses/size).
+        Note: clear() resets metrics; useful for per-test ratios (e.g., 90 hits for maxsize=90 + 100 keys re-run).
+        """
         total = self.hits + self.misses
         return {
             'hits': self.hits,
