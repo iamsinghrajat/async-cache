@@ -113,17 +113,17 @@
         const modeCollections = {
             ttl: [
                 {name: "1. 100 Same Key", keys: Array(100).fill('ttl-same') },
-                {name: "2. 100 Unique Keys", keys: Array.from({length: 100}, (_, i) => `ttl-unique-${i}`) },
+                {name: "2. 100 Unique Keys", keys: Array.from({length: 100}, (_, i) => `ttl-unique-key-${i}`) },  // stable/fixed across calls
                 {name: "3. 50 Same + 50 Different Keys", keys: [...Array(50).fill('ttl-same'), ...Array.from({length: 50}, (_, i) => `ttl-diff-${i}`)] }
             ],
             lru: [
                 {name: "1. 100 Same Key", keys: Array(100).fill('lru-same') },
-                {name: "2. 100 Unique Keys", keys: Array.from({length: 100}, (_, i) => `lru-unique-${i}`) },
+                {name: "2. 100 Unique Keys", keys: Array.from({length: 100}, (_, i) => `lru-unique-key-${i}`) },  // stable/fixed across calls
                 {name: "3. 50 Same + 50 Different Keys", keys: [...Array(50).fill('lru-same'), ...Array.from({length: 50}, (_, i) => `lru-diff-${i}`)] }
             ],
             cache: [
                 {name: "1. 100 Same Key", keys: Array(100).fill('cache-same') },
-                {name: "2. 100 Unique Keys", keys: Array.from({length: 100}, (_, i) => `cache-unique-${i}`) },
+                {name: "2. 100 Unique Keys", keys: Array.from({length: 100}, (_, i) => `cache-unique-key-${i}`) },  // stable/fixed across calls
                 {name: "3. 50 Same + 50 Different Keys", keys: [...Array(50).fill('cache-same'), ...Array.from({length: 50}, (_, i) => `cache-diff-${i}`)] }
             ]
         };
