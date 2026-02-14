@@ -1,5 +1,4 @@
 from collections import OrderedDict
-import copy
 import threading
 
 
@@ -13,8 +12,9 @@ class LRU(OrderedDict):
 
     def __getitem__(self, key):
         # lock hit/move_to_end to prevent interleave races in concurrent re-runs
+        # deepcopy removed (not needed for immutable values; prevents potential race/slow in parallel hits)
         with self._lock:
-            value = copy.deepcopy(super().__getitem__(key))
+            value = super().__getitem__(key)
             self.move_to_end(key)
             return value
 

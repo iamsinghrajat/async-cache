@@ -122,6 +122,32 @@ class TestCacheFeatures(unittest.TestCase):
         # used in cache (e.g. herd/batch keys stable)
         # (implicit via other tests)
 
+    def test_lru_concurrent_eviction(self):
+        """Test for concurrency bug in LRU re-runs with unique keys near maxsize.
+        Pre-fix (race in move_to_end/evict): hits dropped weirdly (e.g., 3% for size=94 vs ~90% for 95).
+        Now: stable ~maxsize hits on re-run (eviction keeps most-recent; no race in parallel tasks).
+        Reproduces UI/direct issue with 100 unique keys retry.
+        """
+        async def _test():
+            maxsize = 94
+            cache = AsyncCache(maxsize=maxsize)
+            unique_keys = [f"ukey-{i}" for i in range(100)]
+            # first parallel fill (misses; evict to maxsize)
+            tasks1 = [cache.get(k, loader=lambda k=k: asyncio.sleep(0, result=f"val-{k}")) for k in unique_keys]
+            await asyncio.gather(*tasks1)
+            m1 = cache.get_metrics()
+            self.assertEqual(m1["size"], maxsize)  # evicted to maxsize
+            self.assertEqual(m1["misses"], 100)
+            # re-run same keys parallel (should ~maxsize hits; no race/drop)
+            tasks2 = [cache.get(k) for k in unique_keys]
+            await asyncio.gather(*tasks2)
+            m2 = cache.get_metrics()
+            # delta for this re-run
+            d_hits = m2["hits"] - m1["hits"]
+            self.assertGreaterEqual(d_hits, maxsize - 5, f"Expected ~{maxsize} hits on re-run for size={maxsize}, got {d_hits} (race fixed)")
+            self.assertEqual(m2["size"], maxsize)
+        asyncio.run(_test())
+
 
 if __name__ == "__main__":
     unittest.main()
