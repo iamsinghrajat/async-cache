@@ -35,7 +35,7 @@
     <!-- Config Section -->
     <div class="section">
         <h2>Cache Configuration</h2>
-        <p class="warn">Params adapt to interface (e.g., batch_* for direct+batch-dataloader only, skip_args/use_cache for decorators only) + custom keys; 100ms DB sim on misses.</p>
+        <p class="warn">Params adapt to interface (batch_* for direct+batch-dataloader only, skip_args/use_cache for decorators only); 100ms DB sim on misses. Keys fixed per collection (regen button); cache persists across tests (re-run uniques for hits; clear to reset).</p>
         <label>Max Size: <input id="maxsize" type="number" value="128" min="1"></label>
         <label>TTL (seconds, empty for none): <input id="ttl" type="number" value="60" min="0" placeholder="60 or empty"></label>
         <!-- skip_args: decorators (@TTL/@LRU) only -->
@@ -47,8 +47,8 @@
             <label>Batch Window (ms): <input id="batch_window_ms" type="number" value="5" min="1"></label>
             <label>Max Batch Size: <input id="max_batch_size" type="number" value="100" min="1"></label>
         </div>
-        <label>Custom Keys (comma-sep, e.g. 'same-key' or 'unique:50' for N uniques; overrides collections/warmup): <input id="custom_keys" type="text" value="" placeholder="leave empty for defaults"></label>
         <button onclick="configureCache()">Apply Configuration</button>
+        <button onclick="regenerateKeys()">Regenerate Keys (randomize for fresh tests)</button>
         <button class="clear-btn" onclick="clearAllCaches()">Clear All Caches</button>
     </div>
 
@@ -145,25 +145,13 @@
             ]
         };
 
-        // Parse custom keys from UI (supports comma-sep, 'same-key', or 'unique:N' for N unique keys)
-        // Used for any test incl. warmup (e.g., specify exact keys).
-        function parseCustomKeys() {
-            const input = document.getElementById('custom_keys').value.trim();
-            if (!input) return null;  // fallback to collection defaults
-            if (input.startsWith('unique:')) {
-                const n = parseInt(input.split(':')[1]) || 100;
-                return Array.from({length: n}, (_, i) => `unique-key-${i}`);
-            }
-            if (input.includes(',')) {
-                return input.split(',').map(k => k.trim());
-            }
-            // e.g., single/same-key
-            return Array(100).fill(input);  // default 100x same for herd etc.
-        }
-
-        // Create buttons for each collection per mode (unique per interface: decorators single/herd/use_cache, direct batch/single)
+        // Keys fixed/deterministic per collection (same every run for reproducible hits on re-test).
+        // Regen randomizes for fresh unique keys; no custom keys option (simplified).
+        // Create/re-render buttons for collections (mode-specific)
         function createCollectionButtons(containerId, mode) {
             const container = document.getElementById(containerId);
+            // clear prev buttons
+            container.innerHTML = '';
             modeCollections[mode].forEach((coll, idx) => {
                 const btn = document.createElement('button');
                 btn.className = 'collection-btn';
@@ -178,6 +166,25 @@
         createCollectionButtons('ttl-collections', 'ttl');
         createCollectionButtons('lru-collections', 'lru');
         createCollectionButtons('cache-collections', 'cache');
+
+        // Regenerate keys (randomize suffixes for fresh uniques; defaults fixed/same)
+        function regenerateKeys() {
+            const rand = Math.random().toString(36).substr(2, 5);  // short random
+            Object.keys(modeCollections).forEach(mode => {
+                modeCollections[mode].forEach(coll => {
+                    if (coll.keys.length > 1 && coll.keys[0].includes('-')) {  // unique-ish
+                        coll.keys = coll.keys.map((_, i) => `${mode}-key-${rand}-${i}`);
+                    } else {
+                        // same-key stays, or randomize single
+                        const base = coll.keys[0].split('-')[0];
+                        coll.keys = Array(coll.keys.length).fill(`${base}-${rand}`);
+                    }
+                });
+            });
+            // re-render buttons
+            ['ttl', 'lru', 'cache'].forEach(m => createCollectionButtons(`${m}-collections`, m));
+            setResult('Keys regenerated (randomized for fresh test; re-runs now unique).');
+        }
 
         // Tab switch + dynamic params for interface:
         // - skip_args/use_cache: decorators (@TTL/@LRU) only
@@ -251,31 +258,29 @@
             setResult(`Configured: ${JSON.stringify(data.config, null, 2)}`);
         }
 
-        // Get keys for test: custom from UI if provided (for warmup etc.), else collection default
+        // Keys always from collection (fixed/deterministic default; regen randomizes).
+        // No custom keys option (simplified).
         function getKeysForTest(coll) {
-            const custom = parseCustomKeys();
-            if (custom) return custom;
             return coll.keys;
         }
 
         // Run 100 parallel requests for a collection (simulates concurrent load for herd/batch)
-        // Mode-specific: decorators (use_cache/herd/single); direct (batch flag).
-        // Supports custom keys; batch config; metrics ONLY from API; results show LAST test only.
-        // Progress bar updates during run (config -> parallel reqs -> metrics).
+        // Mode-specific; NO auto-config (cache persists across runs for re-test hits; manual config/clear only).
+        // Batch flag: direct-only; true= dataloader (fixed: enabled=use_batch=true).
+        // metrics ONLY from API; results LAST only; progress during.
         async function runCollectionTest(mode, collId) {
-            showProgress(10, 'Configuring cache...');
             const coll = modeCollections[mode][collId];
-            const keys = getKeysForTest(coll);  // custom override e.g. for warmup keys
-            const useBatch = (mode === 'cache') && document.getElementById('use_batch').checked;
+            const keys = getKeysForTest(coll);
+            const useBatch = (mode === 'cache') && document.getElementById('use_batch').checked;  // enabled=true -> batch_loader
             const defaultUseCache = document.getElementById('use_cache_default').checked;
             const force_miss = coll.force_miss || false;
-            await configureCache();  // ensure config
+            // NO await configureCache() here (prevents reset; persist for hit on re-run uniques)
             showProgress(40, `Sending ${keys.length} parallel requests...`);
             const cacheType = mode === 'cache' ? 'direct' : mode;
             const startTime = performance.now();
-            // Send requests IN PARALLEL using Promise.all + fetch (demo herd/batch under concurrency)
-            // use_cache: decorator-only (@TTL/@LRU); direct always 'true' (no param)
-            // Batch flag: direct-only; uses dataloader when enabled
+            // Send IN PARALLEL
+            // use_cache: decorator-only; direct ignores (no force-miss param)
+            // Batch: fixed enabled= batch_loader (opposite prev)
             const requests = keys.map(key => {
                 const body = {key};
                 if (mode !== 'cache') {
@@ -284,7 +289,7 @@
                     body.use_cache = use_cache;
                 }
                 if (mode === 'cache') {
-                    body.use_batch = useBatch;  // true= batch_loader
+                    body.use_batch = useBatch;  // true = batch (fix inversion)
                 }
                 return fetch(`/call/${mode}`, {
                     method: 'POST',
@@ -295,27 +300,24 @@
             const results = await Promise.all(requests);
             showProgress(80, 'Fetching metrics...');
             const elapsed = (performance.now() - startTime).toFixed(2);
-            // Get metrics after to show hit ratio, misses (ONLY from metrics API)
+            // Metrics from API
             const metricsResp = await fetch(`/metrics/${cacheType}`);
             const metrics = await metricsResp.json();
-            const summary = `Test: ${coll.name} | Mode: ${mode}${useBatch ? '-batch' : ''} | Keys: ${keys.length} (custom: ${!!parseCustomKeys()}) | Time: ${elapsed}ms\n` +
+            const summary = `Test: ${coll.name} | Mode: ${mode}${useBatch ? '-batch' : ''} | Keys: ${keys.length} | Time: ${elapsed}ms\n` +
                            `Metrics (from API): Hits=${metrics.hits}, Misses=${metrics.misses}, Hit Rate=${(metrics.hit_rate*100).toFixed(2)}%, Size=${metrics.size}\n` +
-                           `Note: All-miss OK for concurrent/first-run (DB calls minimized by herd/batch: ~100ms vs. 10s)`;
+                           `Note: First-run=misses OK; re-run same keys=hits (cache persists; clear to reset). Herd/batch: ~100ms vs 10s DB.`;
             setResult(summary);
-            console.log('Results sample:', results.slice(0, 5));  // log full if needed
+            console.log('Results sample:', results.slice(0, 5));
             showProgress(100, 'Complete!');
-            setTimeout(hideProgress, 1500);  // hide after brief
+            setTimeout(hideProgress, 1500);
         }
 
-        // Additional: Warmup test (uses custom keys if provided; shows progress)
+        // Warmup test (shows progress; uses collection keys; config manual for persist)
         async function testWarmup() {
             showProgress(20, 'Configuring for warmup...');
-            await configureCache();
-            // Override with custom or default
-            let keys = parseCustomKeys();
-            if (!keys) {
-                keys = Array.from({length: 20}, (_, i) => `warmup-key-${i}`);
-            }
+            await configureCache();  // explicit only (cache persist otherwise)
+            // default keys (fixed)
+            const keys = Array.from({length: 20}, (_, i) => `warmup-key-${i}`);
             showProgress(60, `Warming ${keys.length} keys...`);
             const resp = await fetch('/warmup/cache', {
                 method: 'POST',
@@ -323,7 +325,7 @@
                 body: JSON.stringify({keys})
             });
             const data = await resp.json();
-            setResult(`Warmup: ${data.status} for ${data.keys.length} keys (custom: ${!!parseCustomKeys()}). Metrics (from API): ${JSON.stringify(data.metrics)}`);
+            setResult(`Warmup: ${data.status} for ${data.keys.length} keys. Metrics (from API): ${JSON.stringify(data.metrics)}`);
             showProgress(100, 'Warmup complete!');
             setTimeout(hideProgress, 1500);
         }
