@@ -41,6 +41,7 @@ class AsyncCache:
         self._batch_pending = []
         self._batch_lock = asyncio.Lock()
         self._pending_lock = asyncio.Lock()  # protects thundering herd (single loader pending) from races under concurrency
+        self._cache_lock = asyncio.Lock()  # protects LRU cache ops (contains/getitem/setitem) from races under concurrent async tasks/requests; prevents partial eviction/moves
         self._batch_timer = None
         self.hits = 0
         self.misses = 0
@@ -49,11 +50,14 @@ class AsyncCache:
         """Get from cache, loader on miss, with thundering herd protection for concurrent misses on same key.
         Uses _pending_lock to avoid race conditions when multiple async tasks (e.g., HTTP requests) miss simultaneously.
         Only one loader executes; others await the future result. Batch mode for multi-key.
+        _cache_lock protects LRU ops (contains/getitem/set) under concurrent hits/misses (prevents eviction races in parallel re-runs).
         """
-        if key in self.cache:
-            self.hits += 1
-            return self.cache[key]
-        # cache miss (count all concurrent misses)
+        # cache hit path under lock (LRU touch/move_to_end; protects from concurrent evicts in other tasks)
+        async with self._cache_lock:
+            if key in self.cache:
+                self.hits += 1
+                return self.cache[key]
+        # cache miss (count all; outside lock to avoid blocking loader)
         self.misses += 1
         if loader is None and batch_loader is None:
             return None
@@ -76,7 +80,9 @@ class AsyncCache:
             try:
                 value = await loader()
                 ttl_arg = _SENTINEL if ttl is None else ttl
-                self.set(key, value, ttl=ttl_arg)
+                # set under lock (atomic insert + LRU evict if full)
+                async with self._cache_lock:
+                    self.set(key, value, ttl=ttl_arg)
                 fut.set_result(value)
                 return value
             except Exception as exc:
@@ -125,13 +131,16 @@ class AsyncCache:
                 for it in items:
                     val = res_map.get(it[0])
                     ttl_arg = _SENTINEL if it[3] is None else it[3]
-                    self.set(it[0], val, ttl=ttl_arg)
+                    # set under cache_lock (atomic + LRU evict if >maxsize; fixes concurrent eviction races)
+                    async with self._cache_lock:
+                        self.set(it[0], val, ttl=ttl_arg)
                     it[1].set_result(val)
             except Exception as exc:
                 for it in items:
                     it[1].set_exception(exc)
 
     def set(self, key, value, ttl=_SENTINEL):
+        """Set under cache_lock when called from async paths (see get/_flush); direct calls wrapped if concurrent."""
         if ttl is _SENTINEL:
             use_ttl = self.default_ttl
         else:
@@ -144,12 +153,15 @@ class AsyncCache:
         self.cache._set(key, value, ttl_value)
 
     def delete(self, key):
+        """Delete under lock in callers for concurrency safety."""
         self.cache.pop(key, None)
 
     def clear(self):
+        """Clear under lock in callers."""
         self.cache.clear()
 
     def get_metrics(self):
+        """Metrics under lock in callers for consistency (hits/misses/size)."""
         total = self.hits + self.misses
         return {
             'hits': self.hits,
@@ -159,5 +171,6 @@ class AsyncCache:
         }
 
     async def warmup(self, keys_with_loaders):
+        """Warmup: serial gets (each locks internally for hit/miss)."""
         for key, loader in keys_with_loaders.items():
             await self.get(key, loader=loader)
