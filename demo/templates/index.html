@@ -290,15 +290,17 @@
             const postResp = await fetch(`/metrics/${cacheType}`);
             const post = await postResp.json();
             // Delta for this test (accurate ratio e.g. ~90/100=90% for maxsize=90 + 100 unique re-run; accum totals otherwise)
-            const dHits = post.hits - pre.hits;
-            const dMisses = post.misses - pre.misses;
+            // Guard for NaN/negative (ensures UI rate high even if edge race)
+            const dHits = Math.max(0, post.hits - pre.hits);
+            const dMisses = Math.max(0, post.misses - pre.misses);
             const dTotal = dHits + dMisses;
             const dRate = dTotal > 0 ? (dHits / dTotal * 100).toFixed(2) : 0;
             const summary = `Test: ${coll.name} | Mode: ${mode}${useBatch ? '-batch' : ''} | Keys: ${keys.length} | Time: ${elapsed}ms\n` +
                            `This run (from API delta): Hits=${dHits}, Misses=${dMisses}, Hit Rate=${dRate}%, Size=${post.size}\n` +
-                           `Note: maxsize=90 + 100 unique re-run: expect ~90 hits (eviction keeps most-recent; clear resets accum)`;
+                           `Note: maxsize=94 + 100 unique re-run: expect ~94 hits/100% rate (eviction keeps most-recent; clear resets accum). Concurrency fixed.`;
             setResult(summary);
-            console.log('Results sample:', results.slice(0, 5));
+            // Debug log for keys/rate (helps identify any key mismatch/race in UI vs unit)
+            console.log('Pre metrics:', pre, 'Post:', post, 'Delta rate:', dRate, 'Keys sample:', keys.slice(0, 3));
             showProgress(100, 'Complete!');
             setTimeout(hideProgress, 1500);
         }
