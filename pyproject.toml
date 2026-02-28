@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "async-cache"
-version = "1.2.1"
-description = "an asyncio cache"
+version = "2.0.0"
+description = "an asyncio application layer cache and dataloader for python based microservices and applications with thundering herd protection"
 readme = "README.rst"
 requires-python = ">=3.3"
 authors = [{ name = "Rajat Singh", email = "iamsinghrajat@gmail.com" }]
 license = { text = "MIT" }
-keywords = ["asyncio", "lru", "cache", "async", "ttl"]
+keywords = ["asyncio", "lru", "cache", "async", "ttl", "dataloader", "cache warmup", "thundering herd protection"]
 
 [project.urls]
 Homepage = "https://github.com/iamsinghrajat/async-cache"
