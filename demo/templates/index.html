@@ -18,6 +18,7 @@
         .clear-btn { background: #dc3545; }
         .clear-btn:hover { background: #c82333; }
         .warn { color: #856404; background: #fff3cd; padding: 10px; border-radius: 3px; }
+        .hint { color: #0c5460; background: #d1ecf1; padding: 8px; border-radius: 3px; font-size: 0.9em; }
         .mode-section { display: none; }
         .mode-section.active { display: block; }
         .tabs { margin: 10px 0; }
@@ -30,12 +31,12 @@
 </head>
 <body>
     <h1>Async-Cache Test UI</h1>
-    <p class="warn">Simple, functional UI to configure and test async-cache features: TTL/LRU decorators, direct AsyncCache, thundering herd protection, batch loader, metrics, warmup, set/get/delete, use_cache, skip_args etc.</p>
+    <p class="warn">Test async-cache features: decorators, direct cache, herd protection, batch loader, metrics, warmup.</p>
     
     <!-- Config Section -->
     <div class="section">
         <h2>Cache Configuration</h2>
-        <p class="warn">Params adapt to interface (batch_* for direct+batch-dataloader only, skip_args/use_cache for decorators only); 100ms DB sim on misses. Keys fixed per collection (regen button); cache persists (re-run uniques for hits).</p>
+        <p class="hint">Tip: Adjust maxsize and TTL to see how eviction affects hit rates.</p>
         <label>Max Size: <input id="maxsize" type="number" value="128" min="1"></label>
         <label>TTL (seconds, empty for none): <input id="ttl" type="number" value="60" min="0" placeholder="60 or empty"></label>
         <!-- skip_args: decorators (@TTL/@LRU) only -->
@@ -64,7 +65,7 @@
         </div>
         <!-- use_cache flag: decorator-only (not for direct AsyncCache) -->
         <div id="use-cache-section">
-            <label><input id="use_cache_default" type="checkbox" checked> Use Cache (force-miss=false; decorator-only param)</label>
+            <label><input id="use_cache_default" type="checkbox" checked> Use Cache (decorator-only)</label>
         </div>
     </div>
 
@@ -98,11 +99,29 @@
         <button onclick="testSetGetDelete()">Test Set / Get / Delete</button>
     </div>
 
+    <!-- Unit Test Suites -->
+    <div class="section">
+        <h2>Unit Test Suites</h2>
+        <p class="hint">Run individual test suites to verify specific functionality.</p>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 15px;">
+            <button class="collection-btn" onclick="runTestSuite('core')" style="background: #17a2b8;">Core Cache Tests</button>
+            <button class="collection-btn" onclick="runTestSuite('features')" style="background: #17a2b8;">Features Tests</button>
+            <button class="collection-btn" onclick="runTestSuite('concurrency')" style="background: #17a2b8;">Concurrency Tests</button>
+            <button class="collection-btn" onclick="runTestSuite('edge_cases')" style="background: #17a2b8;">Edge Cases Tests</button>
+            <button class="collection-btn" onclick="runTestSuite('lru')" style="background: #17a2b8;">LRU Decorator Tests</button>
+            <button class="collection-btn" onclick="runTestSuite('ttl')" style="background: #17a2b8;">TTL Decorator Tests</button>
+        </div>
+        
+        <button class="collection-btn" onclick="runTestSuite('all')" style="background: #6f42c1; width: 100%; font-weight: bold;">Run All Test Suites</button>
+        <div id="suite-results" class="results" style="margin-top: 10px; display: none;"></div>
+    </div>
+
     <!-- Results -->
     <div class="section">
-        <h2>Results & Metrics (Last Test Run Only)</h2>
-        <p class="warn">Metrics ONLY from /metrics API (delta for this run). For all-miss cases (concurrent same/unique): misses=N correct (semantics); herd/batch protects load (timing ~100ms). Keys fixed; regen for fresh. maxsize=90 + 100 unique re-run: ~90 hits (eviction).</p>
-        <div id="results" class="results">Run a test to see metrics (hit ratio, hits, misses) here...</div>
+        <h2>Results & Metrics</h2>
+        <p class="hint">Test results and cache metrics appear here.</p>
+        <div id="results" class="results">Run a test to see results...</div>
     </div>
 
     <script>
@@ -110,23 +129,34 @@
         // Button names clean (no notes/suggestions like "Herd"; e.g., just "50 Same + 50 Different Keys").
         // Keys fixed/same by default; regen randomizes; batch flag in params (enabled=true uses batch_loader).
         // Cache persists for re-runs (hits on uniques).
+        // Note: For unique keys, we store base keys and shuffle order on each run to avoid LRU eviction cascade.
         const modeCollections = {
             ttl: [
-                {name: "1. 100 Same Key", keys: Array(100).fill('ttl-same') },
-                {name: "2. 100 Unique Keys", keys: Array.from({length: 100}, (_, i) => `ttl-unique-key-${i}`) },  // stable/fixed across calls
-                {name: "3. 50 Same + 50 Different Keys", keys: [...Array(50).fill('ttl-same'), ...Array.from({length: 50}, (_, i) => `ttl-diff-${i}`)] }
+                {name: "1. 100 Same Key", baseKeys: Array(100).fill('ttl-same') },
+                {name: "2. 100 Unique Keys", baseKeys: Array.from({length: 100}, (_, i) => `ttl-unique-key-${i}`) },  // stable/fixed values
+                {name: "3. 50 Same + 50 Different Keys", baseKeys: [...Array(50).fill('ttl-same'), ...Array.from({length: 50}, (_, i) => `ttl-diff-${i}`)] }
             ],
             lru: [
-                {name: "1. 100 Same Key", keys: Array(100).fill('lru-same') },
-                {name: "2. 100 Unique Keys", keys: Array.from({length: 100}, (_, i) => `lru-unique-key-${i}`) },  // stable/fixed across calls
-                {name: "3. 50 Same + 50 Different Keys", keys: [...Array(50).fill('lru-same'), ...Array.from({length: 50}, (_, i) => `lru-diff-${i}`)] }
+                {name: "1. 100 Same Key", baseKeys: Array(100).fill('lru-same') },
+                {name: "2. 100 Unique Keys", baseKeys: Array.from({length: 100}, (_, i) => `lru-unique-key-${i}`) },  // stable/fixed values
+                {name: "3. 50 Same + 50 Different Keys", baseKeys: [...Array(50).fill('lru-same'), ...Array.from({length: 50}, (_, i) => `lru-diff-${i}`)] }
             ],
             cache: [
-                {name: "1. 100 Same Key", keys: Array(100).fill('cache-same') },
-                {name: "2. 100 Unique Keys", keys: Array.from({length: 100}, (_, i) => `cache-unique-key-${i}`) },  // stable/fixed across calls
-                {name: "3. 50 Same + 50 Different Keys", keys: [...Array(50).fill('cache-same'), ...Array.from({length: 50}, (_, i) => `cache-diff-${i}`)] }
+                {name: "1. 100 Same Key", baseKeys: Array(100).fill('cache-same') },
+                {name: "2. 100 Unique Keys", baseKeys: Array.from({length: 100}, (_, i) => `cache-unique-key-${i}`) },  // stable/fixed values
+                {name: "3. 50 Same + 50 Different Keys", baseKeys: [...Array(50).fill('cache-same'), ...Array.from({length: 50}, (_, i) => `cache-diff-${i}`)] }
             ]
         };
+
+        // Fisher-Yates shuffle to randomize key order while keeping same key values
+        function shuffleArray(array) {
+            const shuffled = [...array];  // copy to avoid mutating original
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
 
         // Keys fixed/deterministic per collection (same every run for reproducible hits on re-test).
         // Regen randomizes for fresh unique keys; no custom keys option (simplified).
@@ -155,12 +185,12 @@
             const rand = Math.random().toString(36).substr(2, 5);  // short random
             Object.keys(modeCollections).forEach(mode => {
                 modeCollections[mode].forEach(coll => {
-                    if (coll.keys.length > 1 && coll.keys[0].includes('-')) {  // unique-ish
-                        coll.keys = coll.keys.map((_, i) => `${mode}-key-${rand}-${i}`);
+                    if (coll.baseKeys.length > 1 && coll.baseKeys[0].includes('-')) {  // unique-ish
+                        coll.baseKeys = coll.baseKeys.map((_, i) => `${mode}-key-${rand}-${i}`);
                     } else {
                         // same-key stays, or randomize single
-                        const base = coll.keys[0].split('-')[0];
-                        coll.keys = Array(coll.keys.length).fill(`${base}-${rand}`);
+                        const base = coll.baseKeys[0].split('-')[0];
+                        coll.baseKeys = Array(coll.baseKeys.length).fill(`${base}-${rand}`);
                     }
                 });
             });
@@ -242,9 +272,18 @@
         }
 
         // Keys always from collection (fixed/deterministic default; regen randomizes).
+        // Shuffle order on each call to avoid LRU eviction cascade when cache < unique keys.
         // No custom keys option (simplified).
         function getKeysForTest(coll) {
-            return coll.keys;
+            // For unique keys collections, shuffle order to randomize access pattern
+            // This prevents LRU eviction cascade when cache size < number of unique keys
+            const allSame = coll.baseKeys.every(k => k === coll.baseKeys[0]);
+            if (allSame) {
+                // All same key - no need to shuffle
+                return coll.baseKeys;
+            }
+            // Shuffle to randomize access order while keeping same key values
+            return shuffleArray(coll.baseKeys);
         }
 
         // Run 100 parallel requests for a collection (simulates concurrent load for herd/batch)
@@ -297,7 +336,7 @@
             const dRate = dTotal > 0 ? (dHits / dTotal * 100).toFixed(2) : 0;
             const summary = `Test: ${coll.name} | Mode: ${mode}${useBatch ? '-batch' : ''} | Keys: ${keys.length} | Time: ${elapsed}ms\n` +
                            `This run (from API delta): Hits=${dHits}, Misses=${dMisses}, Hit Rate=${dRate}%, Size=${post.size}\n` +
-                           `Note: maxsize=94 + 100 unique re-run: expect ~94 hits/100% rate (eviction keeps most-recent; clear resets accum). Concurrency fixed.`;
+                           `Note: Key order shuffled each run to avoid LRU eviction cascade. Expect ~maxsize hits on re-run.`;
             setResult(summary);
             // Debug log for keys/rate (helps identify any key mismatch/race in UI vs unit)
             console.log('Pre metrics:', pre, 'Post:', post, 'Delta rate:', dRate, 'Keys sample:', keys.slice(0, 3));
@@ -351,6 +390,168 @@
             });
             setResult('All caches cleared.');
             hideProgress();
+        }
+
+        // Run concurrency test suite
+        async function runConcurrencyTests() {
+            const resultsDiv = document.getElementById('concurrency-results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.textContent = 'Running concurrency tests...';
+            
+            showProgress(50, 'Running concurrency tests...');
+            
+            try {
+                const resp = await fetch('/test/concurrency', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                });
+                const data = await resp.json();
+                
+                let summary = `Concurrency Test Results\n`;
+                summary += `========================\n`;
+                summary += `Tests Run: ${data.tests_run}\n`;
+                summary += `Failures: ${data.failures}\n`;
+                summary += `Errors: ${data.errors}\n`;
+                summary += `Success: ${data.success ? '✓ PASSED' : '✗ FAILED'}\n\n`;
+                
+                if (data.output) {
+                    summary += `Test Output:\n${data.output}\n`;
+                }
+                
+                if (data.failure_details && data.failure_details.length > 0) {
+                    summary += `\nFailures:\n`;
+                    data.failure_details.forEach(f => {
+                        summary += `- ${f.test}: ${f.error.substring(0, 200)}...\n`;
+                    });
+                }
+                
+                if (data.error_details && data.error_details.length > 0) {
+                    summary += `\nErrors:\n`;
+                    data.error_details.forEach(e => {
+                        summary += `- ${e.test}: ${e.error.substring(0, 200)}...\n`;
+                    });
+                }
+                
+                resultsDiv.textContent = summary;
+                setResult(`Concurrency tests: ${data.success ? 'PASSED' : 'FAILED'} (${data.tests_run} tests, ${data.failures} failures, ${data.errors} errors)`);
+            } catch (e) {
+                resultsDiv.textContent = `Error running tests: ${e.message}`;
+                setResult(`Concurrency tests failed with error: ${e.message}`);
+            }
+            
+            showProgress(100, 'Complete!');
+            setTimeout(hideProgress, 1500);
+        }
+
+        // Run all unit tests
+        async function runAllUnitTests() {
+            const resultsDiv = document.getElementById('all-tests-results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.textContent = 'Running all unit tests...';
+            
+            showProgress(50, 'Running all unit tests...');
+            
+            try {
+                const resp = await fetch('/test/all', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                });
+                const data = await resp.json();
+                
+                let summary = `Full Unit Test Results\n`;
+                summary += `========================\n`;
+                summary += `Tests Run: ${data.tests_run}\n`;
+                summary += `Failures: ${data.failures}\n`;
+                summary += `Errors: ${data.errors}\n`;
+                summary += `Success: ${data.success ? '✓ PASSED' : '✗ FAILED'}\n\n`;
+                
+                if (data.output) {
+                    summary += `Test Output:\n${data.output}\n`;
+                }
+                
+                if (data.failure_details && data.failure_details.length > 0) {
+                    summary += `\nFailures:\n`;
+                    data.failure_details.forEach(f => {
+                        summary += `- ${f.test}: ${f.error.substring(0, 200)}...\n`;
+                    });
+                }
+                
+                if (data.error_details && data.error_details.length > 0) {
+                    summary += `\nErrors:\n`;
+                    data.error_details.forEach(e => {
+                        summary += `- ${e.test}: ${e.error.substring(0, 200)}...\n`;
+                    });
+                }
+                
+                resultsDiv.textContent = summary;
+                setResult(`All unit tests: ${data.success ? 'PASSED' : 'FAILED'} (${data.tests_run} tests, ${data.failures} failures, ${data.errors} errors)`);
+            } catch (e) {
+                resultsDiv.textContent = `Error running tests: ${e.message}`;
+                setResult(`Unit tests failed with error: ${e.message}`);
+            }
+            
+            showProgress(100, 'Complete!');
+            setTimeout(hideProgress, 1500);
+        }
+
+        // Run specific test suite
+        async function runTestSuite(suiteName) {
+            const resultsDiv = document.getElementById('suite-results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.textContent = `Running ${suiteName} test suite...`;
+            
+            showProgress(50, `Running ${suiteName} tests...`);
+            
+            try {
+                const resp = await fetch(`/test/suite/${suiteName}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                });
+                const data = await resp.json();
+                
+                if (data.error) {
+                    resultsDiv.textContent = `Error: ${data.error}`;
+                    setResult(`Test suite error: ${data.error}`);
+                    return;
+                }
+                
+                let summary = `${suiteName.toUpperCase()} Test Results\n`;
+                summary += `========================\n`;
+                summary += `Tests Run: ${data.tests_run}\n`;
+                summary += `Failures: ${data.failures}\n`;
+                summary += `Errors: ${data.errors}\n`;
+                summary += `Success: ${data.success ? '✓ PASSED' : '✗ FAILED'}\n\n`;
+                
+                if (data.output) {
+                    summary += `Test Output:\n${data.output}\n`;
+                }
+                
+                if (data.failure_details && data.failure_details.length > 0) {
+                    summary += `\nFailures:\n`;
+                    data.failure_details.forEach(f => {
+                        summary += `- ${f.test}: ${f.error.substring(0, 200)}...\n`;
+                    });
+                }
+                
+                if (data.error_details && data.error_details.length > 0) {
+                    summary += `\nErrors:\n`;
+                    data.error_details.forEach(e => {
+                        summary += `- ${e.test}: ${e.error.substring(0, 200)}...\n`;
+                    });
+                }
+                
+                resultsDiv.textContent = summary;
+                setResult(`${suiteName} tests: ${data.success ? 'PASSED' : 'FAILED'} (${data.tests_run} tests)`);
+            } catch (e) {
+                resultsDiv.textContent = `Error running tests: ${e.message}`;
+                setResult(`Test suite failed with error: ${e.message}`);
+            }
+            
+            showProgress(100, 'Complete!');
+            setTimeout(hideProgress, 1500);
         }
 
         // Set result (LAST test only, no append)

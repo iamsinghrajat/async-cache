@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import threading
 from collections import defaultdict
 
 from .lru import LRU
@@ -29,7 +30,8 @@ class AsyncCache:
             return value
 
         def _set(self, key, value, expiration):
-            super().__setitem__(key, (value, expiration))
+            # Use LRU's __setitem__ to ensure eviction logic runs
+            LRU.__setitem__(self, key, (value, expiration))
 
     def __init__(self, maxsize=128, default_ttl=None, batch_window_ms=5, max_batch_size=100):
         self.maxsize = maxsize
@@ -41,8 +43,8 @@ class AsyncCache:
         self._batch_pending = []
         self._batch_lock = asyncio.Lock()
         self._pending_lock = asyncio.Lock()  # protects thundering herd (single loader pending) from races under concurrency
-        # LRU ops now protected by RLock in lru.LRU base (handles concurrent hits/evicts stable; see lru.py)
         self._batch_timer = None
+        self._metrics_lock = threading.Lock()  # protects hits/misses counters
         self.hits = 0
         self.misses = 0
 
@@ -50,18 +52,20 @@ class AsyncCache:
         """Get from cache, loader on miss, with thundering herd protection for concurrent misses on same key.
         Uses _pending_lock to avoid race conditions when multiple async tasks (e.g., HTTP requests) miss simultaneously.
         Only one loader executes; others await the future result. Batch mode for multi-key.
-        LRU ops protected by RLock in lru.LRU (prevents eviction races in parallel re-runs/hits near maxsize; ensures stable ~94 hits for size=94).
+        LRU ops protected by RLock in lru.LRU (prevents eviction races in parallel re-runs/hits near maxsize).
         """
-        # hit path delegated to LRU (locked internally)
+        # hit path - LRU __getitem__ is protected by RLock internally
         if key in self.cache:
-            self.hits += 1
+            with self._metrics_lock:
+                self.hits += 1
             return self.cache[key]
-        # cache miss (count all)
-        self.misses += 1
+        # cache miss - count it
+        with self._metrics_lock:
+            self.misses += 1
         if loader is None and batch_loader is None:
             return None
         if loader is not None:
-            # single loader with herd protection (lock to prevent race under true concurrency)
+            # single loader with herd protection
             async with self._pending_lock:
                 if key in self._pending:
                     # waiter: future already set by leader
@@ -73,7 +77,7 @@ class AsyncCache:
                     self._pending[key] = fut
                     is_leader = True
             if not is_leader:
-                # await result from leader (protected)
+                # await result from leader
                 return await fut
             # leader only: perform load (lock released to avoid serializing loads)
             try:
@@ -129,7 +133,7 @@ class AsyncCache:
                 for it in items:
                     val = res_map.get(it[0])
                     ttl_arg = _SENTINEL if it[3] is None else it[3]
-                    # set (LRU _lock handles atomic + eviction for concurrency safety)
+                    # set (LRU _lock handles atomic + eviction)
                     self.set(it[0], val, ttl=ttl_arg)
                     it[1].set_result(val)
             except Exception as exc:
@@ -137,7 +141,7 @@ class AsyncCache:
                     it[1].set_exception(exc)
 
     def set(self, key, value, ttl=_SENTINEL):
-        """Set under cache_lock when called from async paths (see get/_flush); direct calls wrapped if concurrent."""
+        """Set a value in the cache. LRU __setitem__ is protected by RLock internally."""
         if ttl is _SENTINEL:
             use_ttl = self.default_ttl
         else:
@@ -150,25 +154,27 @@ class AsyncCache:
         self.cache._set(key, value, ttl_value)
 
     def delete(self, key):
-        """Delete under lock in callers for concurrency safety."""
+        """Delete a key from the cache. LRU pop is protected by RLock internally."""
         self.cache.pop(key, None)
 
     def clear(self):
-        """Clear under lock in callers; also resets metrics for clean test runs (hits/misses=0)."""
+        """Clear the cache and reset metrics. LRU clear is protected by RLock internally."""
         self.cache.clear()
-        self.hits = 0
-        self.misses = 0
+        with self._metrics_lock:
+            self.hits = 0
+            self.misses = 0
 
     def get_metrics(self):
-        """Metrics under lock in callers for consistency (hits/misses/size).
-        Note: clear() resets metrics; useful for per-test ratios (e.g., 90 hits for maxsize=90 + 100 keys re-run).
-        """
-        total = self.hits + self.misses
+        """Get cache metrics (hits, misses, size, hit_rate)."""
+        with self._metrics_lock:
+            hits = self.hits
+            misses = self.misses
+        total = hits + misses
         return {
-            'hits': self.hits,
-            'misses': self.misses,
+            'hits': hits,
+            'misses': misses,
             'size': len(self.cache),
-            'hit_rate': (self.hits / total) if total > 0 else 0.0,
+            'hit_rate': (hits / total) if total > 0 else 0.0,
         }
 
     async def warmup(self, keys_with_loaders):
