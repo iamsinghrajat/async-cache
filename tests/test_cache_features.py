@@ -122,6 +122,20 @@ class TestCacheFeatures(unittest.TestCase):
         # used in cache (e.g. herd/batch keys stable)
         # (implicit via other tests)
 
+    def test_key_with_list_args_is_hashable(self):
+        """Regression: list in args should not raise TypeError in KEY hash."""
+        from cache.key import KEY, make_key
+
+        k = KEY((['https://amzn.to/4rPPcFB'],), {})
+        h = hash(k)
+        self.assertIsInstance(h, int)
+
+        async def dummy(links, use_cache=True):
+            return links
+
+        mk = make_key(dummy, (['https://amzn.to/4rPPcFB'],), {'use_cache': True}, skip_args=0)
+        self.assertIsNotNone(mk)
+
     def test_lru_concurrent_eviction(self):
         """Test for concurrency bug in LRU re-runs with unique keys near maxsize.
         Pre-fix (race in move_to_end/evict): hits dropped weirdly (e.g., 3% for size=94 vs ~90% for 95).

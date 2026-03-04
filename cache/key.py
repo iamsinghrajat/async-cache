@@ -4,6 +4,8 @@ from typing import Any
 def _to_hashable(param: Any):
     """Recursive to hashable for stable keys (tuples/dicts/objs).
     - Tuples recursive.
+    - Lists: tuple(recursive).
+    - Sets/frozensets: sorted tuple(recursive).
     - Dicts: sorted items tuple.
     - Objs: str(sorted vars) (deterministic).
     - Else: str (fallback).
@@ -11,6 +13,10 @@ def _to_hashable(param: Any):
     """
     if isinstance(param, tuple):
         return tuple(map(_to_hashable, param))
+    if isinstance(param, list):
+        return tuple(map(_to_hashable, param))
+    if isinstance(param, (set, frozenset)):
+        return tuple(sorted(_to_hashable(item) for item in param))
     if isinstance(param, dict):
         return tuple(sorted((k, _to_hashable(v)) for k, v in param.items()))
     elif hasattr(param, "__dict__"):
@@ -32,7 +38,7 @@ class KEY:
 
     def __init__(self, args, kwargs):
         # args: tuple; kwargs cleaned/sorted for stability
-        self.args = args  # tuple for hash/eq
+        self.args = _to_hashable(args)
         # copy + remove use_cache (decorator param) + sort for stability
         kw = dict(kwargs)  # copy to avoid side-effect on caller
         kw.pop("use_cache", None)
@@ -57,6 +63,8 @@ class KEY:
 def _to_hashable(param: Any):
     """Recursive to hashable for stable keys (tuples/dicts/objs).
     - Tuples recursive.
+    - Lists: tuple(recursive).
+    - Sets/frozensets: sorted tuple(recursive).
     - Dicts: sorted items tuple.
     - Objs: str(vars) (deterministic repr).
     - Else: str (fallback).
@@ -64,6 +72,10 @@ def _to_hashable(param: Any):
     """
     if isinstance(param, tuple):
         return tuple(map(_to_hashable, param))
+    if isinstance(param, list):
+        return tuple(map(_to_hashable, param))
+    if isinstance(param, (set, frozenset)):
+        return tuple(sorted(_to_hashable(item) for item in param))
     if isinstance(param, dict):
         return tuple(sorted((k, _to_hashable(v)) for k, v in param.items()))
     elif hasattr(param, "__dict__"):
