@@ -89,6 +89,7 @@ class AsyncCache:
                 return value
             except Exception as exc:
                 fut.set_exception(exc)
+                fut.exception()
                 raise
             finally:
                 # cleanup under lock
