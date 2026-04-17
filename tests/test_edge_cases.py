@@ -12,6 +12,7 @@ Tests for backward compatibility, robustness, and all features including:
 """
 
 import asyncio
+import gc
 import random
 import time
 import unittest
@@ -572,6 +573,42 @@ class TestErrorHandling(unittest.TestCase):
             result = await cache.get('key', loader=success_loader)
             self.assertEqual(result, 'success')
         
+        asyncio.run(_test())
+
+    def test_future_exception_retrival(self):
+        """Ensure Future exceptions are retrieved to avoid warnings."""
+        async def _test():
+            cache = AsyncCache()
+            loop = asyncio.get_running_loop()
+            original_handler = loop.get_exception_handler()
+            warning_messages = []
+
+            def exception_handler(_loop, context):
+                message = context.get("message", "")
+                if "Future exception was never retrieved" in message:
+                    warning_messages.append(message)
+                if original_handler is not None:
+                    original_handler(_loop, context)
+
+            loop.set_exception_handler(exception_handler)
+
+            async def failing_loader():
+                raise ValueError("Load failed")
+
+            # Trigger loader failure
+            try:
+                with self.assertRaises(ValueError):
+                    await cache.get('key', loader=failing_loader)
+
+                # Ensure Future finalizers run before assertions.
+                gc.collect()
+                await asyncio.sleep(0)
+            finally:
+                loop.set_exception_handler(original_handler)
+
+            # Check that no "Future exception was never retrieved" warning occurs
+            self.assertEqual(warning_messages, [])
+
         asyncio.run(_test())
 
 
