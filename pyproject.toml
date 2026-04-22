@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "async-cache"
-version = "2.0.1"
+version = "2.0.2"
 description = "an asyncio application layer cache and dataloader for python based microservices and applications with thundering herd protection"
 readme = "README.rst"
 requires-python = ">=3.3"
