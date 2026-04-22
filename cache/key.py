@@ -1,23 +1,56 @@
 from typing import Any
 
+_PRIMITIVES = (int, float, str, bool, bytes, type(None))
+
 
 def _to_hashable(param: Any):
-    """Recursive to hashable for stable keys (tuples/dicts/objs).
-    - Tuples recursive.
-    - Dicts: sorted items tuple.
-    - Objs: str(sorted vars) (deterministic).
-    - Else: str (fallback).
-    Fixes old unstable str(dict.items())/vars.
+    """Recursive to hashable for stable, value-based cache keys.
+
+    Rules:
+    - Primitives: returned as-is.
+    - list/tuple -> tuple(recursive)
+    - dict -> tuple(sorted((k, v)))
+    - set -> sorted tuple (deterministic)
+    - objects -> (type, sorted __dict__)
+    - fallback -> (type, repr)
     """
-    if isinstance(param, tuple):
-        return tuple(map(_to_hashable, param))
+
+    # Only trust true primitives
+    if isinstance(param, _PRIMITIVES):
+        return param
+
+    # sequences
+    if isinstance(param, (list, tuple)):
+        return tuple(_to_hashable(p) for p in param)
+
+    # dict
     if isinstance(param, dict):
-        return tuple(sorted((k, _to_hashable(v)) for k, v in param.items()))
-    elif hasattr(param, "__dict__"):
-        # stable for custom objs
-        return str(sorted(vars(param).items()))
-    else:
-        return str(param)
+        return tuple(
+            sorted((k, _to_hashable(v)) for k, v in param.items())
+        )
+
+    # set
+    if isinstance(param, set):
+        return tuple(
+            sorted(
+                (_to_hashable(p) for p in param),
+                key=lambda x: (type(x).__qualname__, repr(x)),
+            )
+        )
+
+    # objects (value-based)
+    if hasattr(param, "__dict__"):
+        return (
+            type(param).__qualname__,
+            tuple(
+                sorted(
+                    (k, _to_hashable(v)) for k, v in vars(param).items()
+                )
+            ),
+        )
+
+    # fallback (rare / edge types)
+    return (type(param).__qualname__, repr(param))
 
 
 class KEY:
@@ -32,12 +65,12 @@ class KEY:
 
     def __init__(self, args, kwargs):
         # args: tuple; kwargs cleaned/sorted for stability
-        self.args = args  # tuple for hash/eq
+        self.args = tuple(_to_hashable(arg) for arg in args)
         # copy + remove use_cache (decorator param) + sort for stability
         kw = dict(kwargs)  # copy to avoid side-effect on caller
         kw.pop("use_cache", None)
         # recursive hashable for canonical eq/hash
-        self.kwargs = tuple(_to_hashable((k, v)) for k, v in sorted(kw.items()))
+        self.kwargs = tuple((k, _to_hashable(v)) for k, v in sorted(kw.items()))
 
     def __eq__(self, obj):
         """Value equality: must match hash contract."""
@@ -52,25 +85,6 @@ class KEY:
 
     def __repr__(self):
         return f"KEY(args={self.args}, kwargs={self.kwargs})"
-
-
-def _to_hashable(param: Any):
-    """Recursive to hashable for stable keys (tuples/dicts/objs).
-    - Tuples recursive.
-    - Dicts: sorted items tuple.
-    - Objs: str(vars) (deterministic repr).
-    - Else: str (fallback).
-    Prevents instability vs. old str/dict.items().
-    """
-    if isinstance(param, tuple):
-        return tuple(map(_to_hashable, param))
-    if isinstance(param, dict):
-        return tuple(sorted((k, _to_hashable(v)) for k, v in param.items()))
-    elif hasattr(param, "__dict__"):
-        # stable str for custom objs (vars sorted implicit in repr)
-        return str(sorted(vars(param).items()))
-    else:
-        return str(param)
 
 
 def make_key(func, args, kwargs, skip_args=0):
