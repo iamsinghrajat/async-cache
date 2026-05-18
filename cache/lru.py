@@ -3,11 +3,11 @@ import threading
 
 
 class LRU(OrderedDict):
-    """LRU cache using OrderedDict, with RLock for concurrency safety under async tasks (prevents race in move_to_end/evict during parallel hits/sets; fixes weird hit drop near maxsize e.g. 94 vs 95)."""
+    """LRU cache using OrderedDict, with Lock for concurrency safety under async tasks (prevents race in move_to_end/evict during parallel hits/sets)."""
 
     def __init__(self, maxsize, *args, **kwargs):
         self.maxsize = maxsize
-        self._lock = threading.RLock()  # sync lock safe with asyncio (single loop); protects critical sections
+        self._lock = threading.Lock()  # plain Lock (no re-entry needed); protects critical sections
         super().__init__(*args, **kwargs)
 
     def __getitem__(self, key):
@@ -21,8 +21,10 @@ class LRU(OrderedDict):
     def __setitem__(self, key, value):
         # lock set+evict to ensure consistent size/eviction order in concurrent sets
         with self._lock:
+            if self.maxsize is not None and self.maxsize <= 0:
+                return  # maxsize=0 means no-store
             super().__setitem__(key, value)
-            if self.maxsize and len(self) > self.maxsize:
+            if self.maxsize is not None and len(self) > self.maxsize:
                 oldest = next(iter(self))
                 del self[oldest]
 

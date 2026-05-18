@@ -1,12 +1,14 @@
 import asyncio
-import datetime
-import threading
+import time as _time
 from collections import defaultdict
+
+from collections import OrderedDict
 
 from .lru import LRU
 
 # sentinel for set ttl param to distinguish default vs explicit None
 _SENTINEL = object()
+_MISSING = object()  # sentinel for get_if_present miss
 
 
 class AsyncCache:
@@ -15,19 +17,38 @@ class AsyncCache:
             super().__init__(maxsize=maxsize)
 
         def __contains__(self, key):
-            if key not in self.keys():
+            if not OrderedDict.__contains__(self, key):
                 return False
-            else:
-                key_expiration = super().__getitem__(key)[1]
-                if key_expiration and key_expiration < datetime.datetime.now():
-                    del self[key]
-                    return False
-                else:
-                    return True
+            key_expiration = OrderedDict.__getitem__(self, key)[1]
+            if key_expiration and key_expiration < _time.monotonic():
+                with self._lock:
+                    # re-check under lock to avoid TOCTOU
+                    if OrderedDict.__contains__(self, key):
+                        OrderedDict.__delitem__(self, key)
+                return False
+            return True
 
         def __getitem__(self, key):
             value = super().__getitem__(key)[0]
             return value
+
+        def get_if_present(self, key):
+            """Single-lock contains + TTL check + value read + move_to_end.
+            Returns value on hit, _MISSING on miss/expired."""
+            with self._lock:
+                # O(1) dict contains check (bypasses LRU's __contains__)
+                if not OrderedDict.__contains__(self, key):
+                    return _MISSING
+                # raw read (bypasses LRU's __getitem__ which also locks)
+                pair = OrderedDict.__getitem__(self, key)
+                expiration = pair[1]
+                if expiration and expiration < _time.monotonic():
+                    # expired — remove under same lock
+                    OrderedDict.__delitem__(self, key)
+                    return _MISSING
+                # promote in LRU order
+                self.move_to_end(key)
+                return pair[0]
 
         def _set(self, key, value, expiration):
             # Use LRU's __setitem__ to ensure eviction logic runs
@@ -44,7 +65,6 @@ class AsyncCache:
         self._batch_lock = asyncio.Lock()
         self._pending_lock = asyncio.Lock()  # protects thundering herd (single loader pending) from races under concurrency
         self._batch_timer = None
-        self._metrics_lock = threading.Lock()  # protects hits/misses counters
         self.hits = 0
         self.misses = 0
 
@@ -54,14 +74,13 @@ class AsyncCache:
         Only one loader executes; others await the future result. Batch mode for multi-key.
         LRU ops protected by RLock in lru.LRU (prevents eviction races in parallel re-runs/hits near maxsize).
         """
-        # hit path - LRU __getitem__ is protected by RLock internally
-        if key in self.cache:
-            with self._metrics_lock:
-                self.hits += 1
-            return self.cache[key]
+        # hit path - single lock acquisition for contains+TTL+read+promote
+        result = self.cache.get_if_present(key)
+        if result is not _MISSING:
+            self.hits += 1
+            return result
         # cache miss - count it
-        with self._metrics_lock:
-            self.misses += 1
+        self.misses += 1
         if loader is None and batch_loader is None:
             return None
         if loader is not None:
@@ -148,7 +167,7 @@ class AsyncCache:
         else:
             use_ttl = ttl
         ttl_value = (
-            (datetime.datetime.now() + datetime.timedelta(seconds=use_ttl))
+            (_time.monotonic() + use_ttl)
             if use_ttl is not None
             else None
         )
@@ -161,15 +180,13 @@ class AsyncCache:
     def clear(self):
         """Clear the cache and reset metrics. LRU clear is protected by RLock internally."""
         self.cache.clear()
-        with self._metrics_lock:
-            self.hits = 0
-            self.misses = 0
+        self.hits = 0
+        self.misses = 0
 
     def get_metrics(self):
         """Get cache metrics (hits, misses, size, hit_rate)."""
-        with self._metrics_lock:
-            hits = self.hits
-            misses = self.misses
+        hits = self.hits
+        misses = self.misses
         total = hits + misses
         return {
             'hits': hits,

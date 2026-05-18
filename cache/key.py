@@ -19,6 +19,13 @@ def _to_hashable(param: Any):
     if isinstance(param, _PRIMITIVES):
         return param
 
+    # named tuples (before generic tuple/list) — distinguish by type
+    if isinstance(param, tuple) and hasattr(type(param), '_fields'):
+        return (
+            type(param).__qualname__,
+            tuple(_to_hashable(p) for p in param),
+        )
+
     # sequences
     if isinstance(param, (list, tuple)):
         return tuple(_to_hashable(p) for p in param)
@@ -41,7 +48,9 @@ def _to_hashable(param: Any):
     # objects (value-based)
     if hasattr(param, "__dict__"):
         return (
+            type(param).__module__,
             type(param).__qualname__,
+            id(type(param)),
             tuple(
                 sorted(
                     (k, _to_hashable(v)) for k, v in vars(param).items()

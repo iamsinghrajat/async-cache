@@ -62,23 +62,24 @@ class TestAsyncCache(unittest.TestCase):
 
     def test_ttl(self):
         async def _test():
-            cache = AsyncCache(default_ttl=1)
+            _TTL = 0.3
+            cache = AsyncCache(default_ttl=_TTL)
             # default ttl
             cache.set('k1', 10)
             self.assertEqual(await cache.get('k1'), 10)
-            time.sleep(1.1)
+            time.sleep(_TTL + 0.1)
             self.assertIsNone(await cache.get('k1'))
             # override ttl
-            cache.set('k2', 20, ttl=2)
+            cache.set('k2', 20, ttl=_TTL * 2)
             self.assertEqual(await cache.get('k2'), 20)
-            time.sleep(1.1)
+            time.sleep(_TTL + 0.1)
             self.assertEqual(await cache.get('k2'), 20)
-            time.sleep(1.1)
+            time.sleep(_TTL + 0.1)
             self.assertIsNone(await cache.get('k2'))
             # no ttl
             cache.set('k3', 30, ttl=None)
             self.assertEqual(await cache.get('k3'), 30)
-            time.sleep(2)
+            time.sleep(_TTL * 2)
             self.assertEqual(await cache.get('k3'), 30)
         asyncio.run(_test())
 

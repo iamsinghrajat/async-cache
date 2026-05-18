@@ -391,12 +391,12 @@ class TestTTLEdgeCases(unittest.TestCase):
     def test_ttl_expiration(self):
         """Keys expire after TTL."""
         async def _test():
-            cache = AsyncCache(default_ttl=1)
+            cache = AsyncCache(default_ttl=0.3)
             cache.set('key', 'value')
             
             self.assertEqual(await cache.get('key'), 'value')
             
-            time.sleep(1.1)
+            time.sleep(0.4)
             
             self.assertIsNone(await cache.get('key'))
         
@@ -406,10 +406,10 @@ class TestTTLEdgeCases(unittest.TestCase):
         """Per-key TTL overrides default."""
         async def _test():
             cache = AsyncCache(default_ttl=10)
-            cache.set('short', 'value', ttl=1)
+            cache.set('short', 'value', ttl=0.3)
             cache.set('long', 'value', ttl=10)
             
-            time.sleep(1.1)
+            time.sleep(0.4)
             
             self.assertIsNone(await cache.get('short'))
             self.assertEqual(await cache.get('long'), 'value')
@@ -419,10 +419,10 @@ class TestTTLEdgeCases(unittest.TestCase):
     def test_no_ttl(self):
         """ttl=None means no expiration."""
         async def _test():
-            cache = AsyncCache(default_ttl=1)
+            cache = AsyncCache(default_ttl=0.3)
             cache.set('key', 'value', ttl=None)
             
-            time.sleep(1.1)
+            time.sleep(0.4)
             
             self.assertEqual(await cache.get('key'), 'value')
         
@@ -431,10 +431,10 @@ class TestTTLEdgeCases(unittest.TestCase):
     def test_ttl_check_on_contains(self):
         """TTL check happens when checking contains."""
         async def _test():
-            cache = AsyncCache(default_ttl=1)
+            cache = AsyncCache(default_ttl=0.3)
             cache.set('key', 'value')
             
-            time.sleep(1.1)
+            time.sleep(0.4)
             
             # Check should trigger expiration
             self.assertFalse('key' in cache.cache)

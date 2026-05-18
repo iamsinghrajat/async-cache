@@ -37,7 +37,7 @@ class AsyncTTL:
                 return await func(*args, **kwargs)
             return await self.cache.get(key, loader=loader)
 
-        wrapper.__name__ += func.__name__
+        wrapper.__name__ = func.__name__
         wrapper.__dict__['clear_cache'] = self.clear_cache
         wrapper.__dict__['get_metrics'] = self.cache.get_metrics
 
